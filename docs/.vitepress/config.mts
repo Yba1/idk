@@ -38,6 +38,7 @@ export default defineConfig({
         items: [
           { text: "Why Paritok", link: "/why-paritok" },
           { text: "Integration & Measured Numbers", link: "/paritok-integration" },
+          { text: "Hackathon Feedback", link: "/paritok-feedback" },
         ],
       },
       {
