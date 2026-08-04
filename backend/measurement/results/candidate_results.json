@@ -1,0 +1,32 @@
+{
+  "candidate_a_loop": {
+    "proxied_prompt_tokens": 1442,
+    "direct_prompt_tokens": 1434,
+    "reduction_pct": -0.56
+  },
+  "candidate_b_summary": {
+    "proxied_prompt_tokens": 2458,
+    "direct_prompt_tokens": 4159,
+    "reduction_pct": 40.9
+  },
+  "multiturn_session": {
+    "proxied_cumulative": [
+      92,
+      185,
+      282,
+      376,
+      470,
+      565
+    ],
+    "direct_cumulative": [
+      92,
+      185,
+      282,
+      376,
+      470,
+      565
+    ]
+  },
+  "winner": "candidate_b_summary",
+  "threshold_pct": 15.0
+}

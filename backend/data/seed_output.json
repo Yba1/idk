@@ -1,0 +1,65 @@
+{
+  "demo_contrast": {
+    "naive_top5": [
+      "22567182",
+      "32433176",
+      "37663559",
+      "32992074",
+      "40770463"
+    ],
+    "weighted_top5": [
+      "22567182",
+      "32433176",
+      "37663559",
+      "29742610",
+      "40902156"
+    ],
+    "rare_case_pmid": "40902156"
+  },
+  "loop_trace": [
+    {
+      "iteration": 1,
+      "retrieved_pmids": [
+        "22567182",
+        "27922872",
+        "40937265",
+        "40937265",
+        "40902156"
+      ],
+      "relevant": true,
+      "confidence": 0.8,
+      "note": "iteration 1 retrieved 5 papers -> relevance check passed (0.80)"
+    }
+  ],
+  "summary": {
+    "text": "A localized hypermetabolic uptake pattern on brain imaging can be associated with various conditions. For instance, in a case of anti-N-methyl-D-aspartate-receptor (anti-NMDAR) encephalitis associated with an immature teratoma, a focal intense uptake of F-fluorodeoxyglucose was observed in the right medial temporal lobe [2]. This finding was unexpected and highlights the importance of considering encephalitis in the differential diagnosis of hypermetabolic uptake patterns. \n\nIn contrast, cases of dementia with Lewy bodies (DLB) typically present with a characteristic pattern of symmetric hypometabolism in the temporal, parietal, and occipital lobes, with preserved metabolism in the posterior cingulate cortex [3, 4]. This metabolic pattern is highly suggestive of DLB and underscores the value of 18F-FDG PET as a diagnostic tool in the differential evaluation of dementias.\n\nIt's essential to note that the pattern of uptake can vary significantly depending on the underlying condition. In Creutzfeldt-Jakob disease, increased DED uptake with pronounced hypometabolism has been observed in the fronto-parieto-occipital areas and cerebellum, whereas the temporal lobes do not typically exhibit this pattern [1]. \n\nIn summary, a localized hypermetabolic uptake pattern on brain imaging can be associated with various conditions, including encephalitis, dementia with Lewy bodies, and Creutzfeldt-Jakob disease, each with distinct patterns and implications for diagnosis and management. References: [1, 2, 3, 4].",
+    "citations": [
+      {
+        "marker": "[1]",
+        "pmid": "22567182",
+        "title": "Imaging astrocytosis with PET in Creutzfeldt-Jakob disease: case report with histopathological findings."
+      },
+      {
+        "marker": "[2]",
+        "pmid": "27922872",
+        "title": "18F-Fluorodeoxyglucose Uptake in Anti-N-Methyl-D-Aspartate-Receptor Encephalitis Associated With an Immature Teratoma."
+      },
+      {
+        "marker": "[3]",
+        "pmid": "40937265",
+        "title": "Clinical Correlation and Metabolic Findings on 18F-Fluorodeoxyglucose Brain PET in Dementia With Lewy Bodies: A Case Report."
+      },
+      {
+        "marker": "[4]",
+        "pmid": "40937265",
+        "title": "Clinical Correlation and Metabolic Findings on 18F-Fluorodeoxyglucose Brain PET in Dementia With Lewy Bodies: A Case Report."
+      },
+      {
+        "marker": "[5]",
+        "pmid": "40902156",
+        "title": "Diffuse Cutaneous Angiosarcoma Involving Scalp and Face on 18 F-FDG and 68 Ga-NODAGA-RGD PET/CT."
+      }
+    ],
+    "degraded": false
+  }
+}

@@ -1,0 +1,20 @@
+/* Widen the doc content column so full-scale diagrams don't get squeezed
+   into VitePress's default 688px prose width. VitePress independently caps
+   .VPDoc itself (not just .container) when both the left sidebar and the
+   right aside/ToC are present, so both need overriding. */
+.VPDoc.has-sidebar.has-aside,
+.VPDoc.has-sidebar:not(.has-aside) {
+  max-width: 1720px !important;
+}
+
+.VPDoc .container {
+  max-width: 1720px !important;
+}
+
+.VPDoc .content {
+  max-width: 100% !important;
+}
+
+.VPDoc .content-container {
+  max-width: 100% !important;
+}

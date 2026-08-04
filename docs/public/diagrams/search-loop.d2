@@ -1,0 +1,61 @@
+shape: sequence_diagram
+
+classes: {
+  logic: {
+    style.fill: "#dae8fc"
+    style.stroke: "#6c8ebf"
+    style.font-size: 22
+    style.stroke-width: 2
+  }
+  external: {
+    style.fill: "#d5e8d4"
+    style.stroke: "#82b366"
+    shape: cloud
+    style.font-size: 22
+    style.stroke-width: 2
+  }
+}
+
+Groq.class: external
+HybridRetriever.class: logic
+RelevanceCheck.class: logic
+
+Frontend -> SearchLoop: search(query)
+
+note over SearchLoop: ITERATION 1
+
+SearchLoop -> HyDE: build_hyde_prompt(query)
+HyDE -> SearchLoop: system + user prompt
+SearchLoop -> Groq: chat(hyde_messages) via Paritok proxy
+Groq -> SearchLoop: hypothetical_case_report
+SearchLoop -> HybridRetriever: search(query, secondary_query=case_report, top_k=5)
+note over HybridRetriever: BM25 (0.5) + vector (0.5) per query\nprimary 60% + secondary 40% weighted blend\nrarity boost: rare papers x1.6, common papers x1.0
+HybridRetriever -> SearchLoop: papers_ranked
+SearchLoop -> RelevanceCheck: run_relevance_check_batch(query, papers)
+RelevanceCheck -> Groq: chat(batch_prompt) via Paritok proxy
+Groq -> RelevanceCheck: relevance judgments (JSON)
+RelevanceCheck -> SearchLoop: results (relevant_papers_dict)
+SearchLoop -> SearchLoop: relevant_count = count(relevant_papers)
+note over SearchLoop: check: relevant_count >= 2?\nbelow: only runs if this check fails
+
+SearchLoop -> Groq: chat(refine_prompt) via Paritok proxy
+note over SearchLoop: historical context inflation: prior reasoning appended for iteration 2
+Groq -> SearchLoop: refined_query
+
+note over SearchLoop: ITERATION 2 (max_iterations=2, so final)
+
+SearchLoop -> HyDE: build_hyde_prompt(refined_query)
+note over HyDE: user prompt includes prior_reasoning:\ncarried history from iteration 1
+HyDE -> SearchLoop: system + user prompt with history
+SearchLoop -> Groq: chat(hyde_messages) via Paritok proxy
+Groq -> SearchLoop: hypothetical_case_report
+SearchLoop -> HybridRetriever: search(refined_query, secondary_query=case_report, top_k=5)
+HybridRetriever -> SearchLoop: papers_ranked
+SearchLoop -> RelevanceCheck: run_relevance_check_batch(refined_query, papers)
+RelevanceCheck -> Groq: chat(batch_prompt) via Paritok proxy
+Groq -> RelevanceCheck: relevance judgments (JSON)
+RelevanceCheck -> SearchLoop: results (relevant_papers_dict)
+SearchLoop -> SearchLoop: relevant_count = count(relevant_papers)
+note over SearchLoop: final iteration reached, return papers
+
+SearchLoop -> Frontend: return(relevant_papers, trace_log)
