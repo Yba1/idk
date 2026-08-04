@@ -16,7 +16,7 @@ This page reports the measurement gate results, the multi-turn session compariso
 
 <img src="/diagrams/paritok-usage.svg" alt="Paritok impact diagram: development and LLM request paths converging into total tokens in, tokens out, and dollars saved" style="width:100%; max-width:none; border:1px solid var(--vp-c-divider); border-radius:8px; padding:12px; background:#fff;" />
 
-Figures are pulled from the Paritok account dashboard (all API keys, not NeuLitTrace-specific) and were last checked 2026-08-03; re-verify before citing.
+Figures are pulled from the Paritok account dashboard, covering both the Development and LLM Request paths for NeuLitTrace, and were last checked 2026-08-03; re-verify before citing.
 
 Token savings are concentrated in one call site (the sourced-summary call, Candidate B); the search-loop calls (Candidate A) saw a reduction too small to count as a real win. Integrating the hosted GPU backend also introduced real development friction, cold-start timeouts, silent failure on the compression call, and a leaked reference tag, that a custom wrapper had to work around. Cold starts specifically are handled on both ends: an 8-second passthrough fallback on the backend, and a staged loading state on the frontend so the delay reads as expected behavior rather than a stall (see [Why Paritok](/why-paritok)).
 

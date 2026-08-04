@@ -23,7 +23,7 @@ NeuLitTrace was built for Paritok's Token-Efficiency Hackathon, and Paritok is n
   </div>
 </div>
 
-*Paritok account dashboard totals, all API keys, last checked 2026-08-03. Not a NeuLitTrace-specific figure; re-verify before citing elsewhere.*
+*Paritok account dashboard totals, covering both the Development and LLM Request paths for NeuLitTrace, last checked 2026-08-03; re-verify before citing elsewhere.*
 
 <img src="/diagrams/paritok-usage.svg" alt="Paritok impact diagram: development and LLM request paths converging into total tokens in, tokens out, and dollars saved" style="width:100%; max-width:none; border:1px solid var(--vp-c-divider); border-radius:8px; padding:12px; background:#fff; margin: 16px 0;" />
 
