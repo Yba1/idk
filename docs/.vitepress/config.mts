@@ -14,6 +14,7 @@ export default defineConfig({
     "summary-tabs-restructure.md",
   ],
   themeConfig: {
+    logo: "/logo-n.svg",
     nav: [
       { text: "Overview", link: "/overview" },
       { text: "Architecture", link: "/architecture" },

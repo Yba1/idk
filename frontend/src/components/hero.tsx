@@ -38,8 +38,11 @@ export function Hero() {
       </div>
 
       <div className="relative z-[2] flex items-center justify-between px-6 py-9 md:px-12">
-        <span className="font-body text-sm font-semibold uppercase tracking-[0.22em] text-ink">
-          NeuLitTrace
+        <span className="flex items-center gap-3">
+          <img src="/logo-n.svg" alt="" width={32} height={32} className="rounded-[8px]" />
+          <span className="font-body text-sm font-semibold uppercase tracking-[0.22em] text-ink">
+            NeuLitTrace
+          </span>
         </span>
         <span className="rounded-full border border-line-bright bg-void-2/40 px-4 py-2 font-body text-xs tracking-[0.08em] text-mist backdrop-blur-md">
           Literature verification - not a diagnostic tool

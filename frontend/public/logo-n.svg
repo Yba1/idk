@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="NeuLitTrace logo">
+  <defs>
+    <linearGradient id="n-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3a3a3a"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="16" fill="url(#n-bg)" stroke="#5a5a5a" stroke-width="1"/>
+  <path
+    d="M20 46 V18 h6.5 l11 20 V18 H44 V46 h-6.5 l-11 -20 V46 Z"
+    fill="#f5f5f5"
+  />
+</svg>
