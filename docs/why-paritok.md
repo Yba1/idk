@@ -6,6 +6,29 @@ title: Why Paritok
 
 NeuLitTrace was built for Paritok's Token-Efficiency Hackathon, and Paritok is not a bolted-on integration here: it sits directly on the pipeline's most expensive step, the sourced-summary call that reads every retrieved abstract at once.
 
+## The Result
+
+<div style="display:flex; gap:16px; flex-wrap:wrap; margin: 20px 0;">
+  <div style="flex:1; min-width:180px; text-align:center; padding:20px 12px; border:1px solid var(--vp-c-divider); border-radius:12px; background:var(--vp-c-bg-soft);">
+    <div style="font-size:2rem; font-weight:700; color:#2f5f9e;">385.86M</div>
+    <div style="color:var(--vp-c-text-2); font-size:0.9rem;">tokens in</div>
+  </div>
+  <div style="flex:1; min-width:180px; text-align:center; padding:20px 12px; border:1px solid var(--vp-c-divider); border-radius:12px; background:var(--vp-c-bg-soft);">
+    <div style="font-size:2rem; font-weight:700; color:#2f7a3d;">45.04M</div>
+    <div style="color:var(--vp-c-text-2); font-size:0.9rem;">tokens out</div>
+  </div>
+  <div style="flex:1; min-width:180px; text-align:center; padding:20px 12px; border:1px solid var(--vp-c-divider); border-radius:12px; background:var(--vp-c-bg-soft);">
+    <div style="font-size:2rem; font-weight:700; color:#b8860b;">$107.25</div>
+    <div style="color:var(--vp-c-text-2); font-size:0.9rem;">total saved</div>
+  </div>
+</div>
+
+*Paritok account dashboard totals, all API keys, last checked 2026-08-03. Not a NeuLitTrace-specific figure; re-verify before citing elsewhere.*
+
+<img src="/diagrams/paritok-usage.svg" alt="Paritok impact diagram: development and LLM request paths converging into total tokens in, tokens out, and dollars saved" style="width:100%; max-width:none; border:1px solid var(--vp-c-divider); border-radius:8px; padding:12px; background:#fff; margin: 16px 0;" />
+
+The pipeline reaches this result through two paths: the development path (wiring `CompressionPipeline` in directly, working around cold starts and silent failures) and the LLM request path (`compress_for_prompt()` on the stuffed-abstracts context before the sourced-summary call). Both are detailed below.
+
 ## Overview
 
 A RAG pipeline over case reports has one obvious cost center: the moment it stuffs several retrieved abstracts into a single prompt so the model can synthesize a cited answer. That prompt is large, repetitive across similar papers, and paid for on every query. This page explains what Paritok's compression pipeline does at that exact point, what it measurably saved, and what made it straightforward to integrate as an SDK primitive rather than only as a proxy.

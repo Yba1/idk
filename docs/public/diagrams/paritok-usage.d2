@@ -1,5 +1,10 @@
-title: Paritok Overall Impact: Development and Token Efficiency
+title: Paritok Impact: Development and LLM Request Paths
 direction: down
+vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+}
 classes: {
   trigger: { style.fill: "#e1d5e7"; style.stroke: "#9673a6"; style.font-size: 22; style.stroke-width: 2 }
   external: { style.fill: "#d5e8d4"; style.stroke: "#82b366"; shape: cloud; style.font-size: 22; style.stroke-width: 2 }
@@ -8,36 +13,79 @@ classes: {
   error: { style.fill: "#f8cecc"; style.stroke: "#b85450"; style.stroke-dash: 3; style.font-size: 22; style.stroke-width: 2 }
   storage: { style.fill: "#f5f5f5"; style.stroke: "#666666"; shape: cylinder; style.font-size: 22; style.stroke-width: 2 }
   mocked: { style.fill: "#ffe6cc"; style.stroke: "#d79b00"; shape: queue; style.font-size: 22; style.stroke-width: 2 }
+  result: { style.fill: "#d5e8d4"; style.stroke: "#2f7a3d"; style.font-size: 34; style.stroke-width: 4; style.bold: true }
 }
+
 paritok_source: {
   label: "Paritok compression pipeline (account-wide, all API keys)"
   class: logic
 }
-llm_request: {
-  label: "LLM Request / Token Efficiency"
-  style.font-size: 24
+
+development: {
+  label: "Development"
+  style.font-size: 26
   direction: down
-  candidate_b: {
-    label: "Sourced-summary call: gate winner, 40.9% reduction"
+  config_toggle: {
+    label: "Single toggle: use_gpu_server (paritok.yaml)"
     class: logic
   }
-  batch_14: {
-    label: "14-query real-corpus batch: 54% average reduction, up to 95% peak"
+  friction: {
+    label: "Cold starts, no built-in retry, silent 0.0-ratio failures, a leaked REF tag"
+    class: error
+  }
+  workaround: {
+    label: "Custom 8s thread wrapper in llm_client.py degrades to passthrough"
+    class: mocked
+  }
+  config_toggle -> friction -> workaround
+}
+
+llm_request: {
+  label: "LLM Request"
+  style.font-size: 26
+  direction: down
+  compress_step: {
+    label: "compress_for_prompt() on stuffed abstracts, before the sourced-summary call"
+    class: logic
+  }
+  gate_result: {
+    label: "Measurement gate winner: clears the 15% savings threshold"
+    class: logic
+  }
+  batch_result: {
+    label: "Real-corpus batch: consistent reduction, higher on sparse content"
     class: external
   }
-  pipeline_range: {
-    label: "End-to-end gold-set runs: 26.38% to 60.26% reduction across 3 dated runs"
-    class: storage
-  }
-  candidate_b -> batch_14 -> pipeline_range: "" { style.opacity: 0 }
+  compress_step -> gate_result -> batch_result
 }
-aggregate: {
-  label: "Aggregate: Account-wide Totals"
-  style.font-size: 24
-  totals: {
-    label: "340.82M tokens saved of 385.86M processed, 88.3% of volume, 107.25 USD estimated cost saved across 5.6K requests"
-    class: logic
+
+final_numbers: {
+  label: "Total Impact (Paritok account dashboard, all keys)"
+  style.font-size: 26
+  direction: right
+  tokens_in: {
+    label: "385.86M\ntokens in"
+    class: result
+    style.fill: "#dae8fc"
+    style.stroke: "#2f5f9e"
   }
+  tokens_out: {
+    label: "45.04M\ntokens out"
+    class: result
+    style.fill: "#d5e8d4"
+    style.stroke: "#2f7a3d"
+  }
+  dollars_saved: {
+    label: "USD 107.25\ntotal saved"
+    class: result
+    style.fill: "#fff2cc"
+    style.stroke: "#b8860b"
+  }
+  tokens_in -> tokens_out: "compressed" { style.stroke-width: 3 }
+  tokens_out -> dollars_saved: "= savings" { style.stroke-width: 3 }
 }
+
+paritok_source -> development
 paritok_source -> llm_request
-paritok_source -> aggregate
+development.workaround -> final_numbers.tokens_in
+llm_request.batch_result -> final_numbers.tokens_in
