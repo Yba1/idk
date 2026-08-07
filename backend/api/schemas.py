@@ -1,47 +1,90 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
+
+
+class CamelModel(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class QueryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=500)
+    session_id: str
+    user_id: str
+    personalize: bool = False
 
 
-class TraceEntryOut(BaseModel):
+class PaperOut(CamelModel):
+    pmid: str
+    title: str
+    abstract: str
+    journal: str
+    year: int
+    condition: str
+    is_rare: bool
+    url: str
+
+
+class ScoredPaperOut(CamelModel):
+    paper: PaperOut
+    score: float
+    lexical_score: float
+    semantic_score: float
+    rarity_multiplier: float
+    memory_multiplier: float
+
+
+class TraceRoundOut(BaseModel):
     iteration: int
     retrieved_pmids: list[str]
     relevant: bool
     confidence: float
     note: str
-    relevant_count: int = 0
-    total_count: int = 0
+    memory_applied: bool
+    seen_filtered: int
 
 
 class CitationOut(BaseModel):
-    marker: str
+    index: int
     pmid: str
-    title: str
-    condition: str
+    supported: bool | None
+    note: str | None
 
 
-class SuggestedConditionOut(BaseModel):
+class BrainRegionOut(BaseModel):
     name: str
-    paper_count: int
+    atlas_label: str
+    region_literature: str
+
+
+class MemoryOut(BaseModel):
+    applied: bool
+    seen_filtered: int
+    profile_used: bool
+    distilled_context: str
+
+
+class CallSiteCostOut(BaseModel):
+    tokens: int
+    cost_usd: float
+
+
+class CostOut(BaseModel):
+    total_tokens: int
+    cost_usd: float
+    by_call_site: dict[str, CallSiteCostOut]
 
 
 class QueryResponse(BaseModel):
-    summary_text: str
+    request_id: str
+    summary_markdown: str
     citations: list[CitationOut]
-    trace: list[TraceEntryOut]
-    low_confidence: bool
-    degraded: bool
-    no_match: bool = False
-    too_generic: bool = False
-    example_query: str | None = None
-    suggested_conditions: list[SuggestedConditionOut] = []
-    flagged_claims: list[dict] = []
-    case_context: CaseContextOut | None = None
-    differential: list[DifferentialItemOut] = []
+    papers: list[ScoredPaperOut]
+    trace: list[TraceRoundOut]
+    region: BrainRegionOut | None
+    memory: MemoryOut
+    cost: CostOut
 
 
 class ContrastPaperOut(BaseModel):
@@ -59,6 +102,10 @@ class DemoContrastResponse(BaseModel):
 
 
 class ConditionOut(BaseModel):
+    """Consumed by backend/api/routes/conditions.py (Card 1). Keep in sync
+    with backend.app.corpus.conditions.Condition if that shape ever changes.
+    """
+
     name: str
     rarity: str
     region_literature: str
@@ -66,17 +113,26 @@ class ConditionOut(BaseModel):
     overlaps_with: list[str]
 
 
-class CaseContextOut(BaseModel):
-    condition_name: str
-    rarity: str
-    region_literature: str
-    atlas_label: str
-    corpus_paper_count: int
-    imaging_findings: str | None = None
-    teaching_point: str | None = None
+class ProfileOut(BaseModel):
+    user_id: str
+    specialty: str | None
+    conditions_explored: list[str]
+    query_count: int
+    distilled_context: str
+    seen_pmid_count: int
 
 
-class DifferentialItemOut(BaseModel):
-    condition_name: str
-    marker: str
-    pmid: str
+class SpecialtyRequest(BaseModel):
+    user_id: str
+    specialty: str
+
+
+class ForgetRequest(BaseModel):
+    user_id: str
+
+
+class ThreadOut(BaseModel):
+    session_id: str
+    user_id: str
+    queries: list[str]
+    pmids_shown: list[str]

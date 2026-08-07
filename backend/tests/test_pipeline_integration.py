@@ -1,43 +1,57 @@
-import json
-from pathlib import Path
-from unittest.mock import MagicMock
+"""End-to-end pipeline.run_query against the real fake-profile stack
+(FakeRetrieval/FakeLLM/FakeMemory/FakeLedger), no mocking - the call-budget
+assertion here is what protects the whole cost story from a silent
+regression, per plan-v2/02-PHASE-CARD-2A-evermind-memory.md section 4.8.
+"""
+import pytest
 
-from backend.app.llm_client import ChatResult
-from backend.app.loop.refine import run_search_loop
-from backend.app.retrieval.hybrid import HybridRetriever
-from backend.app.summary.generate import generate_sourced_summary
+from backend.app.pipeline import run_query
+from backend.contracts.registry import get_services
 
-CORPUS_PATH = Path(__file__).resolve().parent.parent / "data" / "corpus.json"
+DEMO_QUERY = "localized hypermetabolic uptake pattern on brain imaging"
 
 
-def test_full_pipeline_retrieval_to_sourced_summary():
-    corpus = json.loads(CORPUS_PATH.read_text())
-    retriever = HybridRetriever(corpus)
+@pytest.fixture(autouse=True)
+def _fake_profile(monkeypatch):
+    monkeypatch.setenv("NEULIT_PROFILE", "fake")
+    get_services.cache_clear()
+    yield
+    get_services.cache_clear()
 
-    # Perform a real search to get the actual top-5 pmids
-    search_results = retriever.search("focal hypermetabolic uptake pattern", top_k=5)
-    pmids_top5 = [p["pmid"] for p, _ in search_results]
 
-    # Mark first 3 as relevant (enough to pass 2-paper floor)
-    results_json = '{"results": [' + ', '.join(
-        f'{{"pmid": "{pmid}", "relevant": true, "confidence": 0.88}}'
-        for pmid in pmids_top5[:3]
-    ) + ']}'
+def test_non_refining_query_uses_six_or_fewer_calls_each_with_a_distinct_call_site():
+    services = get_services()
+    before = len(services.ledger.events)
 
-    fake_client = MagicMock()
-    fake_client.chat.side_effect = [
-        ChatResult(content="hypothetical scalp lesion case report", prompt_tokens=20, completion_tokens=10, total_tokens=30),
-        # Batch relevance check: at least 2 papers relevant to pass
-        ChatResult(content=results_json, prompt_tokens=20, completion_tokens=5, total_tokens=25),
-        ChatResult(content='{"summary": "Findings show focal uptake [1], consistent with prior case reports [2].", "imaging_findings": null, "teaching_point": null, "differential": []}',
-                   prompt_tokens=400, completion_tokens=50, total_tokens=450),
-    ]
+    run_query(DEMO_QUERY, user_id="u1", session_id="s1", personalize=True)
 
-    papers, trace = run_search_loop(fake_client, retriever, "focal hypermetabolic uptake pattern")
-    assert len(papers) > 0
-    assert trace[-1].relevant is True
+    call_sites = [e.call_site for e in services.ledger.events[before:]]
+    assert len(call_sites) <= 6
+    assert len(call_sites) == len(set(call_sites))
 
-    summary = generate_sourced_summary(fake_client, "focal hypermetabolic uptake pattern", papers[:5])
-    assert summary.degraded is False
-    assert "[1]" in summary.text
-    assert len(summary.citations) == len(papers[:5])
+
+def test_all_llm_calls_in_one_query_share_a_single_request_id():
+    services = get_services()
+    before = len(services.ledger.events)
+
+    result = run_query(DEMO_QUERY, user_id="u1", session_id="s1", personalize=False)
+
+    request_ids = {e.request_id for e in services.ledger.events[before:]}
+    assert request_ids == {result.request_id}
+
+
+def test_end_to_end_query_returns_a_populated_result():
+    result = run_query(DEMO_QUERY, user_id="u1", session_id="s1", personalize=True)
+
+    assert result.request_id
+    assert len(result.trace) >= 1
+    assert result.cost.total_tokens > 0
+    assert result.cost.cost_usd > 0
+
+
+def test_non_personalized_query_never_touches_memory_and_reports_applied_false():
+    result = run_query(DEMO_QUERY, user_id="u1", session_id="s1", personalize=False)
+
+    assert result.memory.applied is False
+    assert result.memory.profile_used is False
+    assert result.memory.distilled_context == ""

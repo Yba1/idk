@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 
@@ -8,5 +10,5 @@ class LoopTraceEntry:
     relevant: bool
     confidence: float
     note: str
-    relevant_count: int = 0
-    total_count: int = 0
+    memory_applied: bool = False
+    seen_filtered: int = 0
