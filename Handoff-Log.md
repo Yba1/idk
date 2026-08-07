@@ -6,6 +6,63 @@ what was actually executed (all Tier 1, credential-free) vs. what is
 implemented-but-unexecuted and needs a human with real Snowflake
 credentials to complete.
 
+## Update — second pass (this run), still no Snowflake credentials
+
+Continued Card 1 on branch-1, again with zero Snowflake credentials in the
+environment. What changed since the previous entry below:
+
+- **Tier 2 `@pytest.mark.live` tests now exist**
+  (`backend/tests/snowflake/test_live_snowflake.py`): real search-service
+  round-trip on the CP1 gold-set query, one real `COMPLETE` call, one real
+  ledger insert+read-back, one real Analyst question — all against the real
+  `CortexSearchRetriever` / `CortexLLMClient` / `SnowflakeLedger` /
+  `CortexAnalyst` classes with no mocking. All four are marked
+  `@pytest.mark.live` and auto-skipped by
+  `backend/tests/snowflake/conftest.py` unless `SNOWFLAKE_ACCOUNT` /
+  `SNOWFLAKE_USER` / `SNOWFLAKE_PASSWORD` are all set — confirmed by running
+  the full Tier 1 suite and seeing `4 skipped` with no
+  `PytestUnknownMarkWarning`. No repo-root `pytest.ini` was added (outside
+  Card 1's ownership bucket per `scripts/ownership.txt`); marker
+  registration lives in the c1-owned `backend/tests/snowflake/conftest.py`
+  instead. None of the four live tests were run — still no credentials.
+- **Card 2A blocker in `Blockers.md` re-confirmed fresh**, with the exact
+  current traceback (`ModuleNotFoundError: No module named
+  'backend.app.llm_client'` importing `backend.api.main:app` under
+  `NEULIT_PROFILE=fake`) and a copy-pasteable fix (route `get_llm_client()`
+  / `get_retriever()` through `backend.contracts.registry.get_services()`
+  instead of the deleted v1 classes). Still unresolved — not Card 1's file.
+- **`MODEL_PRICING` seed in `snowflake/sql/02_tables.sql` updated** from an
+  authoring-time placeholder to researched published Cortex AI Credit rates
+  (1.8 credits/Mtok in, 9.0 credits/Mtok out, $2/credit, sourced and cited
+  in the SQL comment) for both `claude-3-5-sonnet` and `claude-sonnet-4-5`.
+  **Still list-price research, not an account-verified rate** — see item 4
+  under "What a human with real Snowflake credentials must do" below,
+  updated accordingly.
+- **Retrieval-parity gold set expanded from 14 to 28 queries**
+  (`backend/measurement/run_gate.py`'s `GOLD_SET`) — two independently
+  worded queries per corpus condition instead of one, still computed
+  entirely from `backend/data/corpus.json` with zero credentials via
+  `FakeRetrieval`. Re-ran `python -m backend.measurement.run_gate`:
+  **recall@10 = 0.60, rare_recall@10 = 0.67** (n=28, up from n=14's 0.59 /
+  0.65) — `backend/measurement/results/decision.md` and
+  `retrieval_parity.json` refreshed accordingly.
+- **New `Decisions.md`** at repo root records the model-region-availability
+  contingency plan (phase card §5 item 4) ahead of CP3 pressure: what to
+  check, preference order for a substitute model, and the config/pricing/
+  semantic-model steps to wire it through if `claude-3-5-sonnet` turns out
+  to be unavailable in the account's Cortex region.
+- **Tier 1 re-confirmed green**: `55 passed, 4 skipped` (the 4 new live
+  tests), zero `SNOWFLAKE_*` env vars, same command as before (see below).
+  `git diff --name-only contracts-v1..branch-1` re-checked — every changed
+  path is inside the c1 bucket in `scripts/ownership.txt` (or `Blockers.md`
+  / `Decisions.md` / `Handoff-Log.md` at repo root); no FROZEN file touched.
+
+Still blocked on the same two things as before: a human with real Snowflake
+credentials (everything under "What a human with real Snowflake credentials
+must do to finish" below), and Card 2A resolving `backend/api/dependencies.py`
+so `NEULIT_PROFILE=live_no_memory` can run `/query` end to end once
+credentials exist.
+
 ## Summary status against phase card §6 Definition of Done
 
 - [x] All four SQL files written (`snowflake/sql/01_setup.sql` through
@@ -152,15 +209,15 @@ In order:
 
 ## What was deliberately not attempted in this sandbox
 
-- **Tier 2 `@pytest.mark.live` tests.** The phase card asks for these to be
-  *written* (marked `@pytest.mark.live`) even though they can't run here.
-  They were not added in this pass — Tier 1 coverage (mocked Snowpark
-  sessions) is complete for `CortexSearchRetriever`, `CortexLLMClient`,
-  `SnowflakeLedger`, `CortexAnalyst`, and cost math. A follow-up pass with
-  real credentials should add live round-trip tests per phase card §3.10
-  Tier 2 (real search service round-trip, one real `COMPLETE`, one real
-  ledger insert+read-back, one real Analyst question) before this is fully
-  done per §6.
+- **Running the Tier 2 `@pytest.mark.live` tests.** They now exist
+  (`backend/tests/snowflake/test_live_snowflake.py`, added in the second
+  pass — see the update note at the top of this file) but were never
+  executed — still no Snowflake credentials in this sandbox. A human with
+  real credentials should run
+  `SNOWFLAKE_ACCOUNT=... SNOWFLAKE_USER=... SNOWFLAKE_PASSWORD=... pytest -m live backend/tests/snowflake/test_live_snowflake.py -v`
+  and paste the results here, plus the CP1/CP2/CP3 hand-off notes each test
+  is meant to produce (sample search result, cost/latency, ledger
+  read-back, Analyst answer).
 - Fabricating `SHOW CORTEX SEARCH SERVICES` output, row counts, or any
   other "as if it ran live" result. Every number in this file and in
   `backend/measurement/results/decision.md` that required a live Snowflake
@@ -188,3 +245,15 @@ In order:
 - `backend/measurement/run_gate.py` + `backend/measurement/results/*`
   (repurposed from the deleted Paritok A/B gate)
 - `Blockers.md` (new)
+
+**Second pass additions:**
+
+- `backend/tests/snowflake/conftest.py` (new — `live` marker registration +
+  auto-skip without `SNOWFLAKE_*` creds)
+- `backend/tests/snowflake/test_live_snowflake.py` (new — Tier 2 tests)
+- `Blockers.md` (sharpened with fresh traceback + fix suggestion)
+- `snowflake/sql/02_tables.sql` (`MODEL_PRICING` seed updated with
+  researched, cited rates)
+- `backend/measurement/run_gate.py` + `backend/measurement/results/*`
+  (gold set expanded 14 -> 28 queries, re-run)
+- `Decisions.md` (new — model-region-availability contingency plan)
