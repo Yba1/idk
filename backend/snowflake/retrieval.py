@@ -55,30 +55,41 @@ class CortexSearchRetriever:
         self._search_service = search_service or _SEARCH_SERVICE
 
     # -- internal: one raw Cortex Search call -----------------------------
+    _RESULT_COLUMNS = ["PMID", "TITLE", "ABSTRACT", "JOURNAL", "PUB_YEAR", "CONDITION", "IS_RARE", "URL"]
+
     def _raw_search(self, query: str, limit: int) -> list[dict]:
-        """Returns raw result rows (dicts) from the Cortex Search Service,
-        each expected to carry at least PMID/pmid and a relevance score
-        under '@score' or 'score' per the Cortex Search REST/Python response
-        shape. Returns [] on any failure.
+        """Returns raw result rows (dicts) from the Cortex Search Service via
+        SNOWFLAKE.CORTEX.SEARCH_PREVIEW. Each row carries the requested
+        columns plus an '@scores' object with 'text_match', 'cosine_similarity',
+        and 'reranker_score' sub-scores. Returns [] on any failure.
         """
         session = get_session()
         if session is None:
             return []
         try:
-            root = session.sql(
-                "SELECT PARSE_JSON(SYSTEM$SEARCH("
-                "?, ?, OBJECT_CONSTRUCT('limit', ?))) AS RESP"
-            ).bind([self._search_service, query, limit])
-            rows = root.collect()
+            import json as _json
+            request = _json.dumps({
+                "query": query,
+                "limit": limit,
+                "columns": self._RESULT_COLUMNS,
+            })
+            rows = session.sql(
+                "SELECT SNOWFLAKE.CORTEX.SEARCH_PREVIEW(?, ?) AS RESP",
+                params=[self._search_service, request],
+            ).collect()
             if not rows:
                 return []
-            import json as _json
             resp = rows[0][0]
             payload = _json.loads(resp) if isinstance(resp, str) else resp
             return payload.get("results", []) if isinstance(payload, dict) else []
         except Exception:
             logger.exception("CortexSearchRetriever._raw_search failed for service=%s", self._search_service)
             return []
+
+    @staticmethod
+    def _scores(row: dict) -> dict:
+        s = row.get("@scores", {})
+        return s if isinstance(s, dict) else {}
 
     # -- RetrievalPort ------------------------------------------------------
     def search(
@@ -108,9 +119,12 @@ class CortexSearchRetriever:
             if not pmid:
                 continue
             by_pmid_row[pmid] = row
-            primary_raw[pmid] = float(row.get("@score", row.get("score", 0.0)) or 0.0)
-            lexical[pmid] = float(row.get("lexical_score", 0.0) or 0.0)
-            semantic[pmid] = float(row.get("semantic_score", 0.0) or 0.0)
+            scores = self._scores(row)
+            primary_raw[pmid] = float(
+                scores.get("reranker_score", scores.get("cosine_similarity", 0.0)) or 0.0
+            )
+            lexical[pmid] = float(scores.get("text_match", 0.0) or 0.0)
+            semantic[pmid] = float(scores.get("cosine_similarity", 0.0) or 0.0)
 
         primary_norm = _normalize(primary_raw)
 
@@ -122,7 +136,10 @@ class CortexSearchRetriever:
                 if not pmid:
                     continue
                 by_pmid_row.setdefault(pmid, row)
-                secondary_raw[pmid] = float(row.get("@score", row.get("score", 0.0)) or 0.0)
+                scores = self._scores(row)
+                secondary_raw[pmid] = float(
+                    scores.get("reranker_score", scores.get("cosine_similarity", 0.0)) or 0.0
+                )
             secondary_norm = _normalize(secondary_raw)
 
             fused: dict[str, float] = {}
@@ -172,8 +189,9 @@ class CortexSearchRetriever:
                 "VECTOR_COSINE_SIMILARITY(CONDITION_VEC, "
                 "SNOWFLAKE.CORTEX.EMBED_TEXT_768('snowflake-arctic-embed-m', ?)) AS SIMILARITY "
                 "FROM NEULIT.CORE.CONDITIONS "
-                "ORDER BY SIMILARITY DESC LIMIT ?"
-            ).bind([query, top_n]).collect()
+                "ORDER BY SIMILARITY DESC LIMIT ?",
+                params=[query, top_n],
+            ).collect()
         except Exception:
             logger.exception("CortexSearchRetriever.closest_conditions failed")
             return []
@@ -200,13 +218,14 @@ class CortexSearchRetriever:
             placeholders = ",".join("?" for _ in pmids)
             rows = session.sql(
                 "SELECT PMID, TITLE, ABSTRACT, JOURNAL, PUB_YEAR, CONDITION, IS_RARE, URL "
-                f"FROM NEULIT.CORE.PAPERS WHERE PMID IN ({placeholders})"
-            ).bind(list(pmids)).collect()
+                f"FROM NEULIT.CORE.PAPERS WHERE PMID IN ({placeholders})",
+                params=list(pmids),
+            ).collect()
         except Exception:
             logger.exception("CortexSearchRetriever.get_by_pmids failed")
             return []
 
-        by_pmid = {str(r["PMID"]): _row_to_paper(r) for r in rows}
+        by_pmid = {str(r["PMID"]): _row_to_paper(r.as_dict()) for r in rows}
         # order preserved to match the input sequence
         return [by_pmid[p] for p in pmids if p in by_pmid]
 
@@ -222,7 +241,7 @@ class CortexSearchRetriever:
                 "IN SCHEMA NEULIT.CORE"
             ).collect()
             active = any(
-                str(r.as_dict().get("state", r.as_dict().get("STATE", ""))).upper() == "ACTIVE"
+                str(r.as_dict().get("serving_state", r.as_dict().get("SERVING_STATE", ""))).upper() == "ACTIVE"
                 for r in service_rows
             ) if service_rows else False
             count_row = session.sql("SELECT COUNT(*) AS N FROM NEULIT.CORE.PAPERS").collect()

@@ -79,3 +79,36 @@ in the account's region:**
 
 **Owner:** whoever on Card 1 (or a successor lane, if Card 1 has handed off
 by then) first gets real Snowflake credentials and runs CP1/CP2 setup.
+
+**RESOLVED 2026-08-07, live account `ZNEYKJS-BB01029`:**
+
+1. Confirmed unavailable. `SELECT SNOWFLAKE.CORTEX.COMPLETE('claude-3-5-sonnet', 'ping')`
+   failed after a full 20s statement timeout (not a fast 400 — the call hangs
+   until timeout rather than failing fast, which is itself worth knowing:
+   don't assume "slow" means "warehouse cold-starting", check the model name
+   first). Retried directly via the connector with `timeout=25`:
+   ```
+   512513 (P0000): Request failed for external function COMPLETE with
+   remote service error: '400 'unknown model "claude-3-5-sonnet"''
+   ```
+2. Substitute chosen: **`claude-sonnet-4-5`** — exactly the hedge this file
+   predicted. Verified live (`SELECT SNOWFLAKE.CORTEX.COMPLETE('claude-sonnet-4-5', ...)`
+   returned `'PONG'` in 1.8s). `claude-4-sonnet` also resolved successfully as
+   an alias but `claude-sonnet-4-5` is the canonical name kept. Also
+   confirmed working as non-Claude fallbacks if ever needed: `llama3.1-8b`,
+   `mistral-large2`. Confirmed NOT available in this region: `claude-3-7-sonnet`,
+   `claude-sonnet-4`, `reka-flash`, `snowflake-arctic`.
+3. Wired via configuration: `.env`, `.env.example`, and
+   `config/snowflake.yaml`'s `default_cortex_model` all updated to
+   `claude-sonnet-4-5`; `backend/snowflake/llm.py`'s `_DEFAULT_MODEL` fallback
+   updated to match (env var still takes precedence, no hardcoding of the
+   active model beyond this fallback).
+4. `MODEL_PRICING` already had a `claude-sonnet-4-5` row from the earlier
+   research pass (list-price sourced, not yet reconciled against
+   `SNOWFLAKE.ACCOUNT_USAGE` — that table needs usage history to populate on
+   a fresh account, so exact reconciliation is still a follow-up once the
+   account has real billed usage).
+5. `backend/snowflake/analyst.py` no longer hardcodes `claude-3-5-sonnet` —
+   it now calls the same `_active_model()` (reads `SNOWFLAKE_CORTEX_MODEL`)
+   so the Analyst path and the main chat path can never disagree about which
+   model is live.

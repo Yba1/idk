@@ -23,7 +23,7 @@ logger = logging.getLogger("neulit.snowflake.llm")
 
 _TIMEOUT_SECONDS = 20
 _MAX_RETRIES = 3
-_DEFAULT_MODEL = "claude-3-5-sonnet"
+_DEFAULT_MODEL = "claude-sonnet-4-5"
 
 
 def _active_model() -> str:
@@ -87,9 +87,9 @@ class CortexLLMClient:
             raise RuntimeError("snowflake session unavailable")
 
         result = session.sql(
-            "SELECT SNOWFLAKE.CORTEX.COMPLETE(?, ?, ?) AS RESP",
-            params=[model, prompt_payload, json.dumps(options)],
-        ).collect(timeout=_TIMEOUT_SECONDS)
+            "SELECT SNOWFLAKE.CORTEX.COMPLETE(?, PARSE_JSON(?), PARSE_JSON(?)) AS RESP",
+            params=[model, json.dumps(prompt_payload), json.dumps(options)],
+        ).collect(statement_params={"STATEMENT_TIMEOUT_IN_SECONDS": str(_TIMEOUT_SECONDS)})
         return result[0]["RESP"]
 
     def chat(
@@ -127,8 +127,19 @@ class CortexLLMClient:
             if json_schema is not None:
                 options["response_format"] = {"type": "json", "schema": json_schema}
 
-            payload = [{"role": m.role, "content": m.content} for m in messages]
-            prompt_text_all = "\n".join(m.content for m in messages)
+            # Accept either backend.contracts.models.Message instances or
+            # plain {"role", "content"} dicts - most call sites across the
+            # pipeline still build prompts as dicts, matching the wire shape
+            # Cortex COMPLETE itself expects, rather than constructing
+            # Message objects.
+            def _role(m):
+                return m.role if hasattr(m, "role") else m["role"]
+
+            def _content(m):
+                return m.content if hasattr(m, "content") else m["content"]
+
+            payload = [{"role": _role(m), "content": _content(m)} for m in messages]
+            prompt_text_all = "\n".join(_content(m) for m in messages)
 
             raw_response = None
             last_exc: Exception | None = None

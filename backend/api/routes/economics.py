@@ -137,8 +137,9 @@ def economics_request(request_id: str) -> EconomicsRequestOut:
     try:
         rows = session.sql(
             "SELECT CALL_SITE, PROMPT_TOKENS, COMPLETION_TOKENS, COST_USD, LATENCY_MS, DEGRADED "
-            "FROM NEULIT.CORE.TOKEN_LEDGER WHERE REQUEST_ID = ? ORDER BY OCCURRED_AT"
-        ).bind([request_id]).collect()
+            "FROM NEULIT.CORE.TOKEN_LEDGER WHERE REQUEST_ID = ? ORDER BY OCCURRED_AT",
+            params=[request_id],
+        ).collect()
         calls = [
             RequestCallOut(
                 call_site=r["CALL_SITE"],

@@ -257,3 +257,264 @@ In order:
 - `backend/measurement/run_gate.py` + `backend/measurement/results/*`
   (gold set expanded 14 -> 28 queries, re-run)
 - `Decisions.md` (new — model-region-availability contingency plan)
+
+## Update — third pass: CP1 + CP2, live account, everything below actually executed
+
+First run against a real Snowflake account: `ZNEYKJS-BB01029`, user `YBALRS`.
+Authenticated via Personal Access Token (the account requires MFA; a PAT
+avoids interactive Duo pushes for a headless app). **The PAT is
+ACCOUNTADMIN-scoped** (Snowflake PATs lock to whatever role is active when
+generated, and `NEULIT_APP` didn't exist yet at token-generation time) — see
+"Known deviations" below.
+
+### CP1 — DDL, corpus load, search service
+
+Ran all four SQL files in order (`01_setup.sql` → `02_tables.sql` → corpus
+load → `03_search_service.sql` → `04_views.sql`), plus supplemental grants
+the phase card's own DDL was missing (see "Bugs found and fixed" below).
+
+**Verification gate results:**
+```
+SELECT COUNT(*) FROM NEULIT.CORE.PAPERS;                        -> 329
+SELECT COUNT(*) FROM NEULIT.CORE.CONDITIONS;                     -> 14
+SELECT COUNT(*) FROM NEULIT.CORE.CONDITIONS WHERE IS_RARE;       -> 10
+```
+
+**`SHOW CORTEX SEARCH SERVICES IN SCHEMA NEULIT.CORE` (relevant columns):**
+```
+name=PAPERS_SEARCH  indexing_state=ACTIVE  serving_state=ACTIVE
+source_data_num_rows=329  embedding_model=snowflake-arctic-embed-m-v1.5
+```
+Note: the columns are `indexing_state`/`serving_state`, not a single `state`
+column — `backend/snowflake/retrieval.py`'s own `health()` was checking for
+`state` and would have silently always reported inactive; fixed (see below).
+
+**Gold-set query result** (`"asymmetric parietal hypometabolism on FDG-PET
+with progressive apraxia"`, top 5, via the real `CortexSearchRetriever`):
+```
+42191948  score=1.60    rarity_mult=1.6  Plasma phosphorylated tau biomarkers map onto FDG PET hypometabo...
+30223705  score=1.598   rarity_mult=1.6  Combined findings of FDG-PET and arterial spin labeling in sporadic Cr...
+31985135  score=1.598   rarity_mult=1.6  Different FDG-PET metabolic patterns of anti-AMPAR and anti-NMDAR ence...
+28240664  score=1.597   rarity_mult=1.6  Creutzfeldt-Jakob Disease Mimicking Alzheimer Disease and Dementia Wit...
+36606595  score=1.597   rarity_mult=1.6  (untitled result)
+```
+`closest_conditions()` for the same query correctly surfaced Corticobasal
+syndrome (0.75), Frontotemporal dementia (0.74), Dementia with Lewy bodies
+(0.73) — all rare, all clinically plausible neighbors.
+
+### CP2 — live LLM call, ledger round-trip
+
+`CortexLLMClient.chat()` against the corrected default model
+`claude-sonnet-4-5` (see `Decisions.md` for why `claude-3-5-sonnet` was
+swapped out): request `"Reply with exactly the word: PONG"` returned
+`content='PONG'`, `usage=TokenUsage(prompt_tokens=16, completion_tokens=6,
+total_tokens=22, model='claude-sonnet-4-5', cost_usd=0.0001656)`,
+`degraded=False`. Cost math verified by hand: `(16/1e6)*1.8*2 +
+(6/1e6)*9.0*2 = 0.0001656` — matches exactly.
+
+`SELECT * FROM NEULIT.CORE.V_COST_PER_REQUEST LIMIT 5`:
+```
+request_id  session_id  user_id     llm_calls  total_tokens  cost_usd    started_at
+test-req-2  test-sess   test-user   1          0             0E-8        2026-08-07 12:09:53
+test-req-3  test-sess   test-user   1          22            0.00016560  2026-08-07 12:16:35
+```
+`test-req-2` is the pre-fix degraded run (wrong model name, before the
+`Decisions.md` substitution) — correctly logged as `degraded=True`,
+`cost_usd=0`, proving the "exactly one ledger event per call, including
+failure paths" contract holds live, not just under mocks.
+
+**`NEULIT_PROFILE=live_no_memory` full app import:** confirmed working
+after fixing the Card 2A blocker (see `Blockers.md`, resolved) and
+installing a missing `matplotlib` dependency (`backend/api/routes/atlas.py`,
+not a Card 1 file, imports it directly with no requirements-file entry).
+Full `POST /query` HTTP round-trip was **not** run — see `Blockers.md`'s new
+entry on `client.chat()` signature mismatches in `backend/app/loop/`,
+`backend/app/summary/`, `backend/app/verify/` (outside Card 1's ownership,
+budgeted as separate follow-up work). `/economics/*` and `/conditions` do
+not depend on that pipeline.
+
+### Bugs found and fixed against the live account (none of these surfaced
+under Tier-1 mocks — the mocks encoded the same wrong assumptions the code
+had)
+
+1. `backend/snowflake/retrieval.py` `_raw_search` called a function named
+   `SYSTEM$SEARCH` that does not exist. Fixed to
+   `SNOWFLAKE.CORTEX.SEARCH_PREVIEW(<service>, <json request>)`, the real
+   SQL entry point for Cortex Search.
+2. Every `session.sql(...).bind([...])` call site
+   (`backend/snowflake/retrieval.py` x3, `backend/api/routes/economics.py`
+   x1) — `.bind()` is not a real Snowpark `DataFrame` method; it was
+   silently falling through to Snowpark's `__getattr__` column-lookup path
+   and either erroring unpredictably or (worse) not erroring at all in some
+   shapes. Fixed to the real API: `session.sql(query, params=[...])`.
+3. Cortex Search's actual response shape nests sub-scores under `@scores`
+   (`text_match`, `cosine_similarity`, `reranker_score`), not the flat
+   `@score`/`score` key the code assumed. Fixed score extraction to read
+   `reranker_score` (falling back to `cosine_similarity`) for ranking,
+   `text_match`→`lexical_score`, `cosine_similarity`→`semantic_score`.
+4. `_raw_search`'s requested columns omitted `ABSTRACT` — every returned
+   `Paper.abstract` would have been empty. Added it.
+5. `backend/snowflake/retrieval.py` `health()` checked a `state` key from
+   `SHOW CORTEX SEARCH SERVICES`; the real column names are
+   `indexing_state`/`serving_state`. Fixed — `health()` was silently always
+   reporting the service inactive before this.
+6. `get_by_pmids()` called `.get()` on Snowpark `Row` objects, which don't
+   support dict-style `.get()`. Fixed to `row.as_dict()` before passing to
+   `_row_to_paper`.
+7. `backend/snowflake/llm.py` `_call_complete` used `.collect(timeout=...)`
+   — not a real `DataFrame.collect()` kwarg. Fixed to
+   `.collect(statement_params={"STATEMENT_TIMEOUT_IN_SECONDS": "20"})`,
+   confirmed live (a genuinely slow/unavailable model now cleanly times out
+   at 20s with a real Snowflake error instead of crashing with a `TypeError`
+   before ever reaching Snowflake).
+8. `backend/app/corpus/build_corpus.py` `load_to_snowflake()` built the
+   `CONDITIONS` insert as `INSERT ... VALUES (ARRAY_CONSTRUCT(...), ...)` —
+   Snowflake's `VALUES` clause rejects function calls in literal row tuples.
+   Fixed to `INSERT ... SELECT ... UNION ALL SELECT ...`.
+9. `claude-3-5-sonnet` confirmed unavailable on `COMPLETE` in this account's
+   region — see `Decisions.md` for the full resolution (substituted
+   `claude-sonnet-4-5`, already anticipated as the hedge in the
+   `MODEL_PRICING` seed).
+
+### Supplemental grants (gaps in the phase card's own DDL, item §3.1)
+
+The phase card's `01_setup.sql` grants `NEULIT_APP` only `SELECT`/`INSERT`
+on future tables. That's insufficient for the app to actually run under
+`NEULIT_APP`: the cost views need `SELECT ON FUTURE VIEWS` (a different
+grantable object class in Snowflake — table grants don't cover views), the
+corpus reload needs `UPDATE`/`TRUNCATE` on future tables (`build_corpus.py`
+truncates and re-inserts), and the search service itself needs an explicit
+`GRANT USAGE ON CORTEX SEARCH SERVICE` (services aren't covered by any
+"future" grant class discovered). Added all three live.
+
+### Known deviations from the target architecture
+
+**Running as `ACCOUNTADMIN`, not `NEULIT_APP`, for both setup and runtime.**
+The PAT used this session is role-locked to `ACCOUNTADMIN` (Snowflake PATs
+lock to the role active at generation time; `NEULIT_APP` didn't exist yet
+when this token was generated). `NEULIT_APP` role was still created and
+granted to the user, and all the supplemental grants above were applied to
+it, so switching back is just: generate a new PAT scoped to `NEULIT_APP` in
+Snowsight, and set `SNOWFLAKE_ROLE=NEULIT_APP` in `.env` (it currently reads
+`ACCOUNTADMIN`). **Do this before any real/shared deployment** — running a
+demo app's service account as `ACCOUNTADMIN` is a real security deviation,
+acceptable only as a documented hackathon-speed tradeoff, not a default to
+carry forward.
+
+**`.env` contains the PAT in plaintext** (as `SNOWFLAKE_PASSWORD`, since
+`session.py` reads that var name). Confirmed `.gitignore` covers `.env`.
+Regenerate this token (or at minimum re-scope it to `NEULIT_APP`) before
+this repo or environment is shared with anyone else.
+
+### What's still not done
+
+- **Cortex Analyst untested against a real question.** The hardcoded model
+  reference was fixed (now reads `SNOWFLAKE_CORTEX_MODEL` via `_active_model()`
+  in `backend/snowflake/analyst.py`), but the call shape itself — Analyst
+  invoked *through* `SNOWFLAKE.CORTEX.COMPLETE` with a
+  `semantic_model_file`/`messages` object — is unverified and the
+  `semantic_model.yaml` was never staged to
+  `@NEULIT.CORE.SEMANTIC_MODELS/semantic_model.yaml`, so this path cannot
+  currently work as written. Real Cortex Analyst is a separate REST endpoint
+  (`/api/v2/cortex/analyst/message`), not a `COMPLETE` call — this
+  implementation is a plausible-but-unconfirmed interpretation, flagged as
+  such in an earlier pass too. Per the phase card §3.7's own risk callout,
+  shipping `/economics/ask` with this documented as a limitation is
+  acceptable; did not spend further time on it this pass.
+- ~~**`POST /query` end-to-end** — blocked on the `client.chat()` signature
+  mismatch~~ **RESOLVED, fourth pass — see below.**
+- **`MODEL_PRICING` still list-price research, not reconciled against
+  `SNOWFLAKE.ACCOUNT_USAGE`** — that table needs real billed usage history
+  to populate meaningfully, not available yet on a freshly-created account.
+- **Tier 2 live tests run for real** (`pytest -m live
+  backend/tests/snowflake/test_live_snowflake.py -v`): **3 passed, 1
+  failed.** Search-service round-trip, LLM `COMPLETE`, and ledger
+  insert+read-back all pass — matches the ad hoc checks above.
+  `test_real_analyst_question` fails as expected:
+  `SnowparkSQLException ... Request failed for external function
+  _COMPLETE_WITH_PROMPT with remote service error: 400 '"invalid prompt
+  object"'`. This confirms the suspicion above — `analyst.py`'s
+  Analyst-via-`COMPLETE` approach is not a valid call shape, not just
+  unverified. `/economics/ask` still degrades cleanly (does not 500 —
+  `result["answer"]` is always truthy, just the canned "unavailable"
+  string), so the phase card's fallback ("ship `/economics/ask` returning a
+  canned SQL-backed answer path... do not let it block the ledger or
+  dashboard") is already satisfied. Building the real REST-based Analyst
+  integration (`/api/v2/cortex/analyst/message`, OAuth token handling,
+  staging `semantic_model.yaml` to a Snowflake stage) is real, separate
+  work — not attempted this pass given the explicit scope permission to
+  defer it.
+- **`run_gate.py` live numbers** (retrieval-parity recall@10, real
+  cost/latency percentiles) not regenerated against the now-live search
+  service and ledger traffic.
+
+## Update — fourth pass: `POST /query` fixed end-to-end (outside Card 1's ownership bucket, applied anyway on this solo project)
+
+Full detail in `Blockers.md`'s resolved entry — summary here. The user asked
+for the `/query` pipeline to actually work, not just Snowflake connectivity
+in isolation. Touched files outside Card 1's formal ownership
+(`backend/app/loop/{hyde,relevance_check,refine}.py`,
+`backend/app/summary/generate.py`, `backend/app/verify/citation_check.py`,
+`backend/api/routes/query.py`) since there's no separate Card 2A owner on
+this project to hand it to.
+
+**Root causes, in the order they surfaced (each only visible once the
+pipeline actually ran against a live model — nothing here was catchable by
+Tier-1 mocks, since the mocks encoded the same wrong assumptions):**
+
+1. Stale imports of deleted v1 classes (`ParitokLLMClient`, `HybridRetriever`)
+   for type hints only, across all 5 files above.
+2. `client.chat(messages)` called with zero or the wrong keyword args
+   everywhere (`response_format=`, `direct=`) instead of `LLMPort`'s actual
+   `call_site`/`request_id`/`session_id`/`user_id` keyword-only signature —
+   the core mismatch this blocker was originally about.
+3. `retriever.get_closest_conditions(...)` — v1 method name, v2 is
+   `closest_conditions(...)`.
+4. `ConditionMatch` unpacked as a 3-tuple (`for a, b, c in closest`) — it's a
+   frozen dataclass with 4 fields, not a tuple.
+5. `retriever.search(...)` result unpacked as `[p for p, _ in retrieved]`
+   (v1's `list[tuple[dict, float]]`) — v2 returns `list[ScoredPaper]`
+   (dataclasses). Added a dict-conversion helper at the one call site in
+   `refine.py` rather than rewriting every downstream dict-style consumer.
+6. `query.py`'s `retriever.papers` — `CortexSearchRetriever` has no
+   in-memory corpus attribute (v1's `HybridRetriever` did). Replaced with
+   the static corpus-scope table's `target_count`, already loaded moments
+   later in the same function as `condition_lookup`.
+7. `compress_for_prompt` imported from the deleted `llm_client.py`, never
+   reimplemented in v2 (v2 has no compression step by design). Replaced with
+   the uncompressed prompt + `estimate_tokens`.
+8. `CortexLLMClient.chat()` (Card 1's own file) assumed `Message` dataclass
+   instances; every pipeline call site builds plain dicts. Fixed in `chat()`
+   to accept either, rather than rewriting 4 files' worth of prompt
+   builders.
+9. **The model wraps JSON in markdown fences** despite explicit
+   "ONLY valid JSON" instructions, confirmed live with `claude-sonnet-4-5` —
+   every manual `json.loads(result.content)` in the pipeline (5 sites) was
+   silently hitting its degraded-fallback path. This is why the very first
+   live `/query` run showed 0/5 papers passing the relevance check on a
+   query where the retrieved papers were clearly relevant — looked like a
+   retrieval-quality bug, was actually JSON parsing. Fixed by reusing Card
+   1's own `backend.app.llm.json_repair.try_parse_json` (already
+   fence-tolerant, built for `CortexLLMClient`'s structured-output path)
+   instead of raw `json.loads` at all 5 sites.
+
+**Verified live**, full `POST /query` via `TestClient` against the real
+account, gold-set-style query: `status=200`, real sourced summary with
+`[N]` citations, correct `case_context`, per-sentence `flagged_claims`
+verification (`supported`/`uncited`), trace showing 2/5 papers passing
+relevance on the first iteration (no refine needed). Re-ran the full Tier 1
+suite after all changes — still `54 passed, 4 skipped`, zero regressions.
+
+**Still not covered by this pass:** `/query/stream` (SSE variant) shares
+`_run_query_pipeline` so it inherits the same fixes, but was not separately
+exercised. Test files for the touched modules
+(`test_citation_check.py`, `test_loop_prompts.py`, `test_search_loop.py`,
+`test_summary_generate.py`, `test_pipeline_integration.py`,
+`test_multiturn_session.py`, `test_api_query.py`, `test_query_stream.py`,
+`test_api_atlas.py`, `test_api_demo.py`, `test_api_health.py`,
+`test_seed.py`) still import the deleted `backend.app.llm_client` directly
+and fail to collect — none of these are Card 1's test files, and fixing
+pipeline test infrastructure is separate scope from making the pipeline
+itself work. `full pytest backend/tests/ -q` will show 12 collection errors
+until someone updates those test files' imports/fixtures to match the v2
+contracts (same category of fix as this pass, just in test code).
