@@ -75,7 +75,7 @@ export function PolicyToggle({
                 "disabled:cursor-not-allowed disabled:opacity-50",
                 active
                   ? "bg-[var(--blue-100)] font-semibold text-[var(--blue-800)]"
-                  : "text-muted hover:bg-[var(--blue-50)]",
+                  : "text-trace-muted hover:bg-[var(--blue-50)]",
               ].join(" ")}
             >
               {option.label}
@@ -139,7 +139,7 @@ export function PolicyPanel({ policy }: { policy: PolicyOut | null | undefined }
           <span>{after.toLocaleString()} tokens sent to the model</span>
           <span>{policy.tokensSaved.toLocaleString()} compressed away</span>
         </div>
-        <p className="mt-4 max-w-[62ch] font-body text-[13.5px] leading-relaxed text-muted">
+        <p className="mt-4 max-w-[62ch] font-body text-[13.5px] leading-relaxed text-trace-muted">
           {copy.blurb}
         </p>
         <p className="mt-3 max-w-[62ch] font-body text-[12.5px] leading-relaxed text-dim">
