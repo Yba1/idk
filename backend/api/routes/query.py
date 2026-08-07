@@ -4,6 +4,7 @@ import json
 import logging
 import queue
 import threading
+import uuid
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -91,6 +92,13 @@ def _to_response(result: QueryResult) -> QueryResponse:
             },
         ),
     )
+
+
+def _request_scoped_ids(request: Request) -> tuple[str, str, str]:
+    request_id = str(uuid.uuid4())
+    session_id = request.headers.get("x-session-id") or request_id
+    user_id = request.headers.get("x-user-id") or "anonymous"
+    return request_id, session_id, user_id
 
 
 @router.post("/query", response_model=QueryResponse)

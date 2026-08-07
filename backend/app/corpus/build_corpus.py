@@ -119,6 +119,8 @@ def load_to_snowflake(corpus_path: Path = DEFAULT_OUT_PATH) -> dict:
                 f"VALUES {chunk}"
             ).collect()
 
+    # SELECT ... UNION ALL ..., not VALUES (...) — Snowflake's VALUES clause
+    # rejects function calls like ARRAY_CONSTRUCT inside literal row tuples.
     condition_rows = []
     for name, rows in by_condition.items():
         is_rare = "TRUE" if rows[0].get("rarity") == "rare" else "FALSE"
@@ -127,15 +129,16 @@ def load_to_snowflake(corpus_path: Path = DEFAULT_OUT_PATH) -> dict:
         regions_sql = "ARRAY_CONSTRUCT(" + ",".join(f"'{r.replace(chr(39), chr(39)*2)}'" for r in regions if r) + ")"
         name_sql = name.replace("'", "''")
         condition_rows.append(
-            f"('{name_sql}', {is_rare}, {len(rows)}, '{description}', {regions_sql})"
+            f"SELECT '{name_sql}' AS CONDITION, {is_rare} AS IS_RARE, {len(rows)} AS PAPER_COUNT, "
+            f"'{description}' AS DESCRIPTION, {regions_sql} AS BRAIN_REGIONS"
         )
 
     if condition_rows:
-        chunk = ",\n".join(condition_rows)
+        union_sql = "\nUNION ALL\n".join(condition_rows)
         session.sql(
             "INSERT INTO NEULIT.CORE.CONDITIONS "
             "(CONDITION, IS_RARE, PAPER_COUNT, DESCRIPTION, BRAIN_REGIONS) "
-            f"VALUES {chunk}"
+            f"{union_sql}"
         ).collect()
 
     # CONDITION_VEC filled with a single UPDATE using Cortex EMBED_TEXT_768,

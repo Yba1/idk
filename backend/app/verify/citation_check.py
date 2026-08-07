@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
+from backend.app.llm.json_repair import try_parse_json
 from backend.contracts.models import Message, ScoredPaper
 from backend.contracts.ports import LLMPort
 from backend.app.summary.generate import SourcedCitation
@@ -85,9 +86,11 @@ def check_citations(
     if result.degraded:
         return citations
 
-    try:
-        parsed = json.loads(result.content)
-    except json.JSONDecodeError:
+    # Cortex wraps JSON replies in markdown fences despite "ONLY valid JSON"
+    # instructions; try_parse_json handles both raw JSON and fenced JSON
+    # (see branch-1 commit 4d894d3 postmortem).
+    parsed = try_parse_json(result.content)
+    if parsed is None:
         return citations
 
     results = parsed.get("results")

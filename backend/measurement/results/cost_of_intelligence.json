@@ -152,7 +152,7 @@
     "hits": 28,
     "misses": 28,
     "hit_rate": 0.5,
-    "estimated_cost_saved_usd": 0.032256,
+    "estimated_cost_saved_usd": 0.0005376,
     "n_hyde_calls_issued": 56,
     "ledger_events_written": 56
   },
@@ -161,5 +161,20 @@
     "reduced_cost_usd_per_summary_call": 0.00775044,
     "estimated_cost_reduction_pct": 13.88,
     "note": "Compression-only cost delta on a representative 1000-prompt-token summary call, using the real, observed compression reduction % above and the real compute_cost_usd() function. Does not include the separate hyde cache savings (see cache section's estimated_cost_saved_usd, which is call-site scoped and additive, not folded into this per-summary-call number)."
+  },
+  "routing": {
+    "call_site": "hyde",
+    "n_calls": 56,
+    "per_call_prompt_tokens": 120,
+    "per_call_completion_tokens": 40,
+    "model_routing_off": "claude-3-5-sonnet",
+    "model_routing_on": "mistral-7b",
+    "cost_per_call_usd_routing_off": 0.001152,
+    "cost_per_call_usd_routing_on": 1.92e-05,
+    "total_cost_usd_routing_off": 0.064512,
+    "total_cost_usd_routing_on": 0.0010752,
+    "delta_usd": 0.0634368,
+    "reduction_pct": 98.33,
+    "note": "Real cost delta on 56 hyde calls (28-query gold set x 2 issues/query, same call volume measure_cache() above actually executed), computed via the real compute_cost_usd() against both MODEL_PRICING rows in _PRICING. mistral-7b's OUTPUT-token rate is now a real published Snowflake AI Credit rate ($0.30/Mtok-out, see snowflake/sql/02_tables.sql comment); its INPUT-token rate is still an estimate. The % reduction is a real computation from real code, but the absolute $ accuracy is bounded by the unverified input rate and by the published-vs-account-billed rate gap until reconciled against a live account."
   }
 }
