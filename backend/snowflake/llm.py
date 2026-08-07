@@ -13,6 +13,7 @@ import logging
 import os
 import time
 
+from backend.app.llm.cache import cache_key, get_default_cache, is_cacheable_call_site
 from backend.app.llm.json_repair import build_repair_messages, try_parse_json
 from backend.app.llm.pricing import ModelPriceRow, compute_cost_usd
 from backend.app.llm.tokenizer import estimate_tokens
@@ -111,6 +112,45 @@ class CortexLLMClient:
         prompt_tokens = 0
         completion_tokens = 0
         estimated = False
+        cache_hit = False
+
+        # Prompt cache: scoped to hyde/relevance_check only (Phase B.3).
+        # Cache hit returns the cached ChatResult without ever calling
+        # Cortex COMPLETE; the LedgerEvent written for this call in the
+        # `finally` block below still records token/cost as zero (a hit
+        # cost nothing), tracked separately in the module-level CacheStats
+        # rather than on the frozen LedgerEvent.
+        cache = get_default_cache()
+        cache_key_val: str | None = None
+        if is_cacheable_call_site(call_site):
+            cache_key_val = cache_key(call_site, model, messages, json_schema)
+            cached = cache.get(cache_key_val)
+            if cached is not None:
+                cache_hit = True
+                cache.stats.record_hit()
+                latency_ms = int((time.monotonic() - start) * 1000)
+                try:
+                    self._resolve_ledger().record(
+                        LedgerEvent(
+                            request_id=request_id,
+                            session_id=session_id,
+                            user_id=user_id,
+                            call_site=call_site,
+                            usage=TokenUsage(
+                                prompt_tokens=0,
+                                completion_tokens=0,
+                                total_tokens=0,
+                                model=model,
+                                cost_usd=0.0,
+                            ),
+                            latency_ms=latency_ms,
+                            degraded=cached.degraded,
+                            occurred_at_iso=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        )
+                    )
+                except Exception:
+                    logger.exception("llm: ledger.record failed for cache hit")
+                return cached
 
         try:
             if not snowflake_available():
@@ -199,7 +239,7 @@ class CortexLLMClient:
             if estimated:
                 logger.info("llm: token counts estimated=True for call_site=%s", call_site)
 
-            return ChatResult(
+            result = ChatResult(
                 content=content,
                 usage=TokenUsage(
                     prompt_tokens=prompt_tokens,
@@ -211,6 +251,11 @@ class CortexLLMClient:
                 degraded=degraded,
                 error=error,
             )
+            if cache_key_val is not None:
+                cache.stats.record_miss(cost_usd=cost_usd)
+                if not degraded:
+                    cache.set(cache_key_val, result)
+            return result
         except Exception as exc:  # belt-and-braces: never raise out of chat()
             logger.exception("llm: unhandled error in chat()")
             degraded = True
