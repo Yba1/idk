@@ -1,0 +1,165 @@
+{
+  "compression": {
+    "n_queries": 28,
+    "n_paper_abstracts_compressed": 280,
+    "overall_reduction_pct": 34.71,
+    "tokens_before_total": 64947,
+    "tokens_after_total": 42401,
+    "per_query": [
+      {
+        "query": "scalp angiosarcoma FDG-PET case report",
+        "n_papers": 10,
+        "reduction_pct": 35.3
+      },
+      {
+        "query": "semantic variant primary progressive aphasia imaging",
+        "n_papers": 10,
+        "reduction_pct": 36.02
+      },
+      {
+        "query": "corticobasal syndrome frontoparietal cortex PET",
+        "n_papers": 10,
+        "reduction_pct": 30.04
+      },
+      {
+        "query": "midbrain hypometabolism in progressive supranuclear palsy",
+        "n_papers": 10,
+        "reduction_pct": 36.07
+      },
+      {
+        "query": "frontotemporal dementia anterior temporal involvement",
+        "n_papers": 10,
+        "reduction_pct": 34.86
+      },
+      {
+        "query": "Creutzfeldt-Jakob disease parietal occipital PET",
+        "n_papers": 10,
+        "reduction_pct": 23.39
+      },
+      {
+        "query": "dementia with Lewy bodies occipital hypometabolism",
+        "n_papers": 10,
+        "reduction_pct": 32.83
+      },
+      {
+        "query": "anti-NMDA receptor encephalitis basal ganglia involvement",
+        "n_papers": 10,
+        "reduction_pct": 35.33
+      },
+      {
+        "query": "primary angiitis of CNS MCA territory findings",
+        "n_papers": 10,
+        "reduction_pct": 30.78
+      },
+      {
+        "query": "neurolymphomatosis leptomeningeal PET",
+        "n_papers": 10,
+        "reduction_pct": 33.79
+      },
+      {
+        "query": "Alzheimer's disease FDG-PET temporal parietal pattern",
+        "n_papers": 10,
+        "reduction_pct": 35.46
+      },
+      {
+        "query": "temporal lobe epilepsy interictal FDG-PET",
+        "n_papers": 10,
+        "reduction_pct": 46.01
+      },
+      {
+        "query": "acute ischemic stroke MCA territory PET",
+        "n_papers": 10,
+        "reduction_pct": 47.29
+      },
+      {
+        "query": "Parkinson's disease basal ganglia PET",
+        "n_papers": 10,
+        "reduction_pct": 29.84
+      },
+      {
+        "query": "cutaneous angiosarcoma helical tomotherapy scalp brachytherapy",
+        "n_papers": 10,
+        "reduction_pct": 36.34
+      },
+      {
+        "query": "Huntington disease presenting as primary progressive aphasia semantics",
+        "n_papers": 10,
+        "reduction_pct": 23.42
+      },
+      {
+        "query": "flortaucipir PET MRI 4R tauopathy corticobasal degeneration",
+        "n_papers": 10,
+        "reduction_pct": 23.22
+      },
+      {
+        "query": "AV1451 tau retention progressive supranuclear palsy eye movement disorder",
+        "n_papers": 10,
+        "reduction_pct": 37.13
+      },
+      {
+        "query": "MAPT mutation behavioral variant frontotemporal dementia biomarker",
+        "n_papers": 10,
+        "reduction_pct": 28.88
+      },
+      {
+        "query": "DPA-714 PET MRI neuroinflammation sporadic Creutzfeldt-Jakob disease",
+        "n_papers": 10,
+        "reduction_pct": 20.86
+      },
+      {
+        "query": "amyloid positivity probable dementia with Lewy bodies REM sleep behavior disorder",
+        "n_papers": 10,
+        "reduction_pct": 34.86
+      },
+      {
+        "query": "NMDAR GFAP mGluR5 tripartite autoantibody autoimmune encephalitis",
+        "n_papers": 10,
+        "reduction_pct": 31.62
+      },
+      {
+        "query": "granulomatous primary angiitis central nervous system brain PET MRI",
+        "n_papers": 10,
+        "reduction_pct": 44.76
+      },
+      {
+        "query": "diffuse large B-cell lymphoma central peripheral nervous system involvement",
+        "n_papers": 10,
+        "reduction_pct": 42.75
+      },
+      {
+        "query": "amyloid PET typical Alzheimer's disease biomarker pattern",
+        "n_papers": 10,
+        "reduction_pct": 6.7
+      },
+      {
+        "query": "interictal FDG-PET hypometabolism seizure focus localization epilepsy",
+        "n_papers": 10,
+        "reduction_pct": 50.86
+      },
+      {
+        "query": "middle cerebral artery territory infarct acute stroke perfusion imaging",
+        "n_papers": 10,
+        "reduction_pct": 37.44
+      },
+      {
+        "query": "nigrostriatal dopaminergic degeneration motor Parkinson's disease imaging",
+        "n_papers": 10,
+        "reduction_pct": 36.34
+      }
+    ]
+  },
+  "cache": {
+    "hits": 28,
+    "misses": 28,
+    "hit_rate": 0.5,
+    "estimated_cost_saved_usd": 0.032256,
+    "n_hyde_calls_issued": 56,
+    "ledger_events_written": 56
+  },
+  "cost": {
+    "baseline_cost_usd_per_summary_call": 0.009,
+    "reduced_cost_usd_per_summary_call": 0.00775044,
+    "estimated_cost_reduction_pct": 13.88,
+    "note": "Compression-only cost delta on a representative 1000-prompt-token summary call, using the real, observed compression reduction % above and the real compute_cost_usd() function. Does not include the separate hyde cache savings (see cache section's estimated_cost_saved_usd, which is call-site scoped and additive, not folded into this per-summary-call number)."
+  }
+}

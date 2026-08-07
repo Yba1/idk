@@ -222,3 +222,39 @@ aphasia semantic variant / retrieved corticobasal syndrome literature),
 2 citations, `flagged_claims` showing real per-sentence citation
 verification (`supported`/`uncited` statuses), trace showing
 `"2/5 passed relevance check -> passed"` on iteration 1.
+
+## [c1] Card 2A needs to wire backend/app/llm/compress.py into pipeline.py
+
+**File:** `backend/app/pipeline.py` (Card 2A ownership)
+
+**Not a bug/import failure like the entry above — a feature hand-off.**
+`backend/app/llm/compress.py` (new, Card 1, this pass) exposes
+`compress_papers_for_prompt(query, papers, top_n=4)` — extractive
+sentence-level compression of retrieved paper abstracts, real measured
+34.71% token reduction on the gold set (see
+`backend/measurement/results/decision.md` section 4). It is fully
+implemented and tested (`backend/tests/snowflake/test_compression.py`) but
+**not called from anywhere in the live request path**, because prompt
+assembly for the `summary` and `citation_check` call sites lives in
+`backend/app/pipeline.py`, which is outside Card 1's ownership bucket.
+
+**Requested change:** wherever `pipeline.py` builds the multi-paper
+abstract text that goes into the `summary` and `citation_check` prompts,
+call `compress_papers_for_prompt(query, [(p.pmid, p.abstract) for p in
+papers], top_n=4)` and use each `PaperCompression.result.text` in place of
+the raw abstract, keyed by `pmid` so citation markers stay aligned to the
+right paper. `hyde`, `relevance_check`, `refine`, and `memory_distill`
+should NOT be touched — they don't build multi-paper abstract prompts.
+
+**Owner:** Card 2A. Not resolved by Card 1 because `backend/app/pipeline.py`
+is outside Card 1's ownership bucket (`scripts/ownership.txt`).
+
+**Note added during merge (2026-08-07):** `backend/app/pipeline.py` is
+currently a `NotImplementedError` stub, not wired into `/query` at all —
+the actual live `/query` path (fixed in the "client.chat() call sites"
+entry above) calls `run_search_loop`/`generate_sourced_summary`/
+`check_citations`/`check_differential` directly from
+`backend/api/routes/query.py`, bypassing `Pipeline` entirely. So this
+hand-off request should probably target `generate.py`/`citation_check.py`
+directly (the real call sites) rather than `pipeline.py` (dead code), once
+someone picks it up.
