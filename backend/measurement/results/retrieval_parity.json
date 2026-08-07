@@ -1,0 +1,176 @@
+{
+  "per_query": [
+    {
+      "query": "scalp angiosarcoma FDG-PET case report",
+      "condition": "Scalp angiosarcoma",
+      "is_rare": true,
+      "recall_at_10": 0.6667
+    },
+    {
+      "query": "semantic variant primary progressive aphasia imaging",
+      "condition": "Primary progressive aphasia semantic variant",
+      "is_rare": true,
+      "recall_at_10": 0.7
+    },
+    {
+      "query": "corticobasal syndrome frontoparietal cortex PET",
+      "condition": "Corticobasal syndrome",
+      "is_rare": true,
+      "recall_at_10": 0.6
+    },
+    {
+      "query": "midbrain hypometabolism in progressive supranuclear palsy",
+      "condition": "Progressive supranuclear palsy",
+      "is_rare": true,
+      "recall_at_10": 0.6
+    },
+    {
+      "query": "frontotemporal dementia anterior temporal involvement",
+      "condition": "Frontotemporal dementia",
+      "is_rare": true,
+      "recall_at_10": 0.6
+    },
+    {
+      "query": "Creutzfeldt-Jakob disease parietal occipital PET",
+      "condition": "Creutzfeldt-Jakob disease",
+      "is_rare": true,
+      "recall_at_10": 0.7
+    },
+    {
+      "query": "dementia with Lewy bodies occipital hypometabolism",
+      "condition": "Dementia with Lewy bodies",
+      "is_rare": true,
+      "recall_at_10": 0.8
+    },
+    {
+      "query": "anti-NMDA receptor encephalitis basal ganglia involvement",
+      "condition": "Anti-NMDA receptor encephalitis",
+      "is_rare": true,
+      "recall_at_10": 1.0
+    },
+    {
+      "query": "primary angiitis of CNS MCA territory findings",
+      "condition": "Primary angiitis of CNS",
+      "is_rare": true,
+      "recall_at_10": 0.8
+    },
+    {
+      "query": "neurolymphomatosis leptomeningeal PET",
+      "condition": "Neurolymphomatosis CNS involvement",
+      "is_rare": true,
+      "recall_at_10": 0.0
+    },
+    {
+      "query": "Alzheimer's disease FDG-PET temporal parietal pattern",
+      "condition": "Alzheimer's disease probable typical FDG-PET pattern",
+      "is_rare": false,
+      "recall_at_10": 0.0
+    },
+    {
+      "query": "temporal lobe epilepsy interictal FDG-PET",
+      "condition": "Temporal lobe epilepsy interictal FDG-PET",
+      "is_rare": false,
+      "recall_at_10": 0.7
+    },
+    {
+      "query": "acute ischemic stroke MCA territory PET",
+      "condition": "Acute ischemic stroke MCA territory acute phase",
+      "is_rare": false,
+      "recall_at_10": 0.6
+    },
+    {
+      "query": "Parkinson's disease basal ganglia PET",
+      "condition": "Parkinson's disease motor form later stage",
+      "is_rare": false,
+      "recall_at_10": 0.5
+    },
+    {
+      "query": "cutaneous angiosarcoma helical tomotherapy scalp brachytherapy",
+      "condition": "Scalp angiosarcoma",
+      "is_rare": true,
+      "recall_at_10": 1.0
+    },
+    {
+      "query": "Huntington disease presenting as primary progressive aphasia semantics",
+      "condition": "Primary progressive aphasia semantic variant",
+      "is_rare": true,
+      "recall_at_10": 0.3
+    },
+    {
+      "query": "flortaucipir PET MRI 4R tauopathy corticobasal degeneration",
+      "condition": "Corticobasal syndrome",
+      "is_rare": true,
+      "recall_at_10": 0.4
+    },
+    {
+      "query": "AV1451 tau retention progressive supranuclear palsy eye movement disorder",
+      "condition": "Progressive supranuclear palsy",
+      "is_rare": true,
+      "recall_at_10": 0.5
+    },
+    {
+      "query": "MAPT mutation behavioral variant frontotemporal dementia biomarker",
+      "condition": "Frontotemporal dementia",
+      "is_rare": true,
+      "recall_at_10": 0.7
+    },
+    {
+      "query": "DPA-714 PET MRI neuroinflammation sporadic Creutzfeldt-Jakob disease",
+      "condition": "Creutzfeldt-Jakob disease",
+      "is_rare": true,
+      "recall_at_10": 0.9
+    },
+    {
+      "query": "amyloid positivity probable dementia with Lewy bodies REM sleep behavior disorder",
+      "condition": "Dementia with Lewy bodies",
+      "is_rare": true,
+      "recall_at_10": 0.9
+    },
+    {
+      "query": "NMDAR GFAP mGluR5 tripartite autoantibody autoimmune encephalitis",
+      "condition": "Anti-NMDA receptor encephalitis",
+      "is_rare": true,
+      "recall_at_10": 0.9
+    },
+    {
+      "query": "granulomatous primary angiitis central nervous system brain PET MRI",
+      "condition": "Primary angiitis of CNS",
+      "is_rare": true,
+      "recall_at_10": 0.6
+    },
+    {
+      "query": "diffuse large B-cell lymphoma central peripheral nervous system involvement",
+      "condition": "Neurolymphomatosis CNS involvement",
+      "is_rare": true,
+      "recall_at_10": 0.75
+    },
+    {
+      "query": "amyloid PET typical Alzheimer's disease biomarker pattern",
+      "condition": "Alzheimer's disease probable typical FDG-PET pattern",
+      "is_rare": false,
+      "recall_at_10": 0.0
+    },
+    {
+      "query": "interictal FDG-PET hypometabolism seizure focus localization epilepsy",
+      "condition": "Temporal lobe epilepsy interictal FDG-PET",
+      "is_rare": false,
+      "recall_at_10": 0.7
+    },
+    {
+      "query": "middle cerebral artery territory infarct acute stroke perfusion imaging",
+      "condition": "Acute ischemic stroke MCA territory acute phase",
+      "is_rare": false,
+      "recall_at_10": 0.8
+    },
+    {
+      "query": "nigrostriatal dopaminergic degeneration motor Parkinson's disease imaging",
+      "condition": "Parkinson's disease motor form later stage",
+      "is_rare": false,
+      "recall_at_10": 0.2
+    }
+  ],
+  "n_queries": 28,
+  "recall_at_10": 0.6042,
+  "rare_recall_at_10": 0.6708,
+  "n_rare_queries": 20
+}

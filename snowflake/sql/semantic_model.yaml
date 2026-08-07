@@ -1,0 +1,146 @@
+# Cortex Analyst semantic model for /economics/ask.
+# Points at the cost views + pricing table created by 04_views.sql / 02_tables.sql.
+name: neulit_cost_model
+description: >
+  Token spend and cost economics for NeuLitTrace's Snowflake Cortex LLM calls.
+tables:
+  - name: token_spend
+    description: One row per pipeline call site per model, aggregated cost and token totals.
+    base_table:
+      database: NEULIT
+      schema: CORE
+      table: V_COST_BY_CALL_SITE
+    dimensions:
+      - name: call_site
+        expr: CALL_SITE
+        data_type: TEXT
+        synonyms: ["step", "stage", "part of the pipeline", "pipeline stage"]
+      - name: model
+        expr: MODEL
+        data_type: TEXT
+        synonyms: ["llm", "model name"]
+    measures:
+      - name: calls
+        expr: CALLS
+        data_type: NUMBER
+        synonyms: ["number of calls", "call count"]
+      - name: total_tokens
+        expr: TOTAL_TOKENS
+        data_type: NUMBER
+        synonyms: ["tokens", "token count"]
+      - name: cost_usd
+        expr: COST_USD
+        data_type: NUMBER
+        synonyms: ["spend", "how much", "dollars", "cost"]
+      - name: avg_latency_ms
+        expr: AVG_LATENCY_MS
+        data_type: NUMBER
+        synonyms: ["latency", "how slow", "response time"]
+      - name: degraded_calls
+        expr: DEGRADED_CALLS
+        data_type: NUMBER
+        synonyms: ["failures", "how many degraded", "errors"]
+
+  - name: requests
+    description: One row per user-facing /query request, aggregated across its LLM calls.
+    base_table:
+      database: NEULIT
+      schema: CORE
+      table: V_COST_PER_REQUEST
+    dimensions:
+      - name: request_id
+        expr: REQUEST_ID
+        data_type: TEXT
+      - name: session_id
+        expr: SESSION_ID
+        data_type: TEXT
+        synonyms: ["session"]
+      - name: user_id
+        expr: USER_ID
+        data_type: TEXT
+        synonyms: ["user", "researcher", "cost per user"]
+      - name: started_at
+        expr: STARTED_AT
+        data_type: TIMESTAMP
+        synonyms: ["when", "time", "last 10 queries"]
+    measures:
+      - name: llm_calls
+        expr: LLM_CALLS
+        data_type: NUMBER
+      - name: total_tokens
+        expr: TOTAL_TOKENS
+        data_type: NUMBER
+      - name: cost_usd
+        expr: COST_USD
+        data_type: NUMBER
+        synonyms: ["spend", "dollars", "cost per request"]
+
+  - name: hourly_spend
+    description: Token spend bucketed by hour.
+    base_table:
+      database: NEULIT
+      schema: CORE
+      table: V_COST_BY_HOUR
+    dimensions:
+      - name: hour
+        expr: HOUR
+        data_type: TIMESTAMP
+        synonyms: ["today", "hour", "time bucket"]
+    measures:
+      - name: total_tokens
+        expr: TOTAL_TOKENS
+        data_type: NUMBER
+      - name: cost_usd
+        expr: COST_USD
+        data_type: NUMBER
+        synonyms: ["spend", "dollars"]
+      - name: requests
+        expr: REQUESTS
+        data_type: NUMBER
+
+  - name: models
+    description: Cortex model pricing, credits per million tokens.
+    base_table:
+      database: NEULIT
+      schema: CORE
+      table: MODEL_PRICING
+    dimensions:
+      - name: model
+        expr: MODEL
+        data_type: TEXT
+    measures:
+      - name: credits_per_mtok_in
+        expr: CREDITS_PER_MTOK_IN
+        data_type: NUMBER
+      - name: credits_per_mtok_out
+        expr: CREDITS_PER_MTOK_OUT
+        data_type: NUMBER
+      - name: usd_per_credit
+        expr: USD_PER_CREDIT
+        data_type: NUMBER
+
+verified_queries:
+  - name: last_10_queries_cost
+    question: "what did the last 10 queries cost"
+    sql: >
+      SELECT REQUEST_ID, COST_USD, STARTED_AT FROM NEULIT.CORE.V_COST_PER_REQUEST
+      ORDER BY STARTED_AT DESC LIMIT 10;
+  - name: most_expensive_step
+    question: "which pipeline step is most expensive"
+    sql: >
+      SELECT CALL_SITE, SUM(COST_USD) AS COST_USD FROM NEULIT.CORE.V_COST_BY_CALL_SITE
+      GROUP BY CALL_SITE ORDER BY COST_USD DESC LIMIT 1;
+  - name: avg_cost_per_request_today
+    question: "what is the average cost per request today"
+    sql: >
+      SELECT AVG(COST_USD) AS AVG_COST_USD FROM NEULIT.CORE.V_COST_PER_REQUEST
+      WHERE STARTED_AT >= DATE_TRUNC('day', CURRENT_TIMESTAMP());
+  - name: degraded_call_count
+    question: "how many calls degraded"
+    sql: >
+      SELECT SUM(DEGRADED_CALLS) AS DEGRADED_CALLS FROM NEULIT.CORE.V_COST_BY_CALL_SITE;
+  - name: cost_per_user
+    question: "cost per user"
+    sql: >
+      SELECT USER_ID, SUM(COST_USD) AS COST_USD FROM NEULIT.CORE.V_COST_PER_REQUEST
+      GROUP BY USER_ID ORDER BY COST_USD DESC;
