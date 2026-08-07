@@ -56,6 +56,24 @@ const page = await ctx.newPage();
 
 const wait = (ms) => page.waitForTimeout(ms);
 
+/* A static hold reads as a frozen video. `scrollIntoView` lands in ~400ms and
+ * then nothing moves, so an 8-second beat is 7.6 seconds of still image --
+ * measured at 28 of 79 seconds visually unchanged in the first cut.
+ *
+ * hold() replaces waiting with a slow continuous drift: the frame keeps
+ * moving for the whole beat while the subject stays in shot. Steps are small
+ * enough (~1px per 60ms) that it reads as a deliberate camera move rather
+ * than a scroll. */
+async function hold(ms, driftPx = 90) {
+  const step = 60;
+  const n = Math.max(1, Math.round(ms / step));
+  const per = driftPx / n;
+  for (let i = 0; i < n; i++) {
+    await page.evaluate((d) => window.scrollBy(0, d), per);
+    await page.waitForTimeout(step);
+  }
+}
+
 async function smoothTo(selectorOrY) {
   if (typeof selectorOrY === "number") {
     await page.evaluate((y) => window.scrollTo({ top: y, behavior: "smooth" }), selectorOrY);
@@ -82,14 +100,14 @@ async function runQuery(policyLabel) {
 // ── 0:00 ─ Hero. The thesis. ────────────────────────────────────────────
 beat("hero");
 await page.goto("http://localhost:3000", { waitUntil: "networkidle" });
-await wait(4000);
+await hold(4000, 70);
 
 // ── 0:05 ─ The corpus: rare conditions first. ───────────────────────────
 beat("corpus / rarity ladder");
 await smoothTo("#query");
 await wait(1200);
 await page.evaluate(() => window.scrollBy({ top: 900, behavior: "smooth" }));
-await wait(4200);
+await hold(4200, 80);
 
 // ── 0:11 ─ Ask the question. ────────────────────────────────────────────
 beat("compose query");
@@ -112,7 +130,7 @@ await wait(1500);
 
 beat("TIGHT panel");
 await smoothTo('[data-testid="policy-panel"]');
-await wait(8000);
+await hold(8000, 110);
 
 // ── 0:33 ─ Generous: same budget, three times the papers. ───────────────
 beat("run GENEROUS");
@@ -120,7 +138,7 @@ await runQuery("Generous");
 await wait(1200);
 beat("GENEROUS panel");
 await smoothTo('[data-testid="policy-panel"]');
-await wait(12000);
+await hold(12000, 150);
 
 // ── 0:49 ─ The sourced summary. Every sentence carries its paper. ───────
 beat("sourced summary + sources");
@@ -130,14 +148,14 @@ await page.evaluate(() => {
   );
   if (h) h.scrollIntoView({ behavior: "smooth", block: "start" });
 });
-await wait(8000);
+await hold(8000, 110);
 
 // ── 0:58 ─ The papers behind it. ────────────────────────────────────────
 beat("papers tab");
 await page.getByRole("tab", { name: "Papers", exact: true }).click();
 await wait(400);
 await page.evaluate(() => window.scrollBy({ top: 300, behavior: "smooth" }));
-await wait(4200);
+await hold(4200, 80);
 
 // ── 1:03 ─ What it cost, per pipeline step. ─────────────────────────────
 beat("cost tab");
@@ -149,7 +167,7 @@ await page.evaluate(() => {
   );
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
 });
-await wait(4800);
+await hold(4800, 80);
 
 // ── 1:05 ─ Memory. ──────────────────────────────────────────────────────
 beat("memory panel");
@@ -159,9 +177,9 @@ await page.evaluate(() => {
   );
   if (h) h.scrollIntoView({ behavior: "smooth", block: "start" });
 });
-await wait(3500);
+await hold(3500, 60);
 await page.evaluate(() => window.scrollBy({ top: 520, behavior: "smooth" }));
-await wait(5200);
+await hold(5200, 90);
 
 // ── 1:17 ─ Close on the hero. ───────────────────────────────────────────
 beat("close");
