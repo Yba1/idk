@@ -6,6 +6,32 @@ what was actually executed (all Tier 1, credential-free) vs. what is
 implemented-but-unexecuted and needs a human with real Snowflake
 credentials to complete.
 
+## Update — 2026-08-07 (later): mistral-7b OUTPUT rate corrected from
+placeholder to real published rate
+
+Followed up on the Phase E routing measurement immediately after landing
+it. WebSearch found a real Snowflake published rate for `mistral-7b`
+output tokens ($0.30/1M tokens under the AI Credit system, $2.00/credit
+flat, effective 2026-04-01 — see
+https://docs.snowflake.com/en/user-guide/snowflake-cortex/pricing and
+https://dataengineerhub.blog/articles/snowflake-cortex-cost-comparison)
+that the original Phase E pass didn't turn up. Updated the OUTPUT rate in
+both `snowflake/sql/02_tables.sql`'s `MODEL_PRICING` seed and
+`backend/measurement/run_cost_of_intelligence.py`'s `_PRICING` mirror from
+0.9 to 0.15 credits/Mtok-out (0.30/2.00). The INPUT rate is still an
+estimate (0.03 credits/Mtok-in, derived from the same input:output ratio
+as the claude-3-5-sonnet row — no model-specific input rate was found).
+
+Re-ran `python -m backend.measurement.run_cost_of_intelligence`: the
+routing delta on the `hyde` call-site moved from $0.057792/89.58% to
+**$0.0634368 saved, a 98.33% reduction**, since the real rate turned out
+to be ~6x cheaper than the earlier placeholder — the correction moved the
+number up, not down. `backend/measurement/results/decision.md` section 5
+and the JSON results file are updated accordingly, with the caveat that
+the input-token rate and account-vs-list-price gap still need live
+reconciliation. Tier 1 suite re-confirmed green (57 passed, 4 skipped)
+after the change.
+
 ## Update — 2026-08-07: prompt caching + context compression ("Cost of
 Intelligence" hackathon feature), still no Snowflake credentials
 

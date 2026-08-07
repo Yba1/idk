@@ -109,7 +109,7 @@ overall_reduction_pct=34.71%
 
 === Cache ===
 hits=28 misses=28 hit_rate=0.5
-estimated_cost_saved_usd=0.00336
+estimated_cost_saved_usd=0.0005376
 ledger_events_written=56
 
 === Cost (compression-only, representative summary call) ===
@@ -120,9 +120,28 @@ estimated_cost_reduction_pct=13.88%
 === Routing (Phase E, hyde call-site cost delta) ===
 n_calls=56 model_off=claude-3-5-sonnet model_on=mistral-7b
 total_cost_usd_routing_off=0.064512
-total_cost_usd_routing_on=0.00672
-delta_usd=0.057792 reduction_pct=89.58%
+total_cost_usd_routing_on=0.0010752
+delta_usd=0.0634368 reduction_pct=98.33%
 ```
+
+**Update (2026-08-07, later same day):** `mistral-7b`'s OUTPUT-token rate
+was upgraded from an unresearched placeholder (0.9 credits/Mtok-out) to a
+real published rate: Snowflake's AI Credit Consumption Table lists
+mistral-7b output tokens at $0.30/1M tokens under the flat $2.00/credit
+system effective 2026-04-01 (0.30/2.00 = 0.15 credits/Mtok-out) -- see
+https://docs.snowflake.com/en/user-guide/snowflake-cortex/pricing and
+https://dataengineerhub.blog/articles/snowflake-cortex-cost-comparison.
+The INPUT rate is still an estimate (0.03 credits/Mtok-in, derived from the
+same input:output ratio as the claude-3-5-sonnet row) -- no model-specific
+input rate was found. Re-running with the corrected output rate raised the
+routing delta from $0.057792/89.58% to **$0.0634368 saved, a 98.33%
+reduction**, since the real rate turned out to be ~6x cheaper than the
+earlier placeholder, not more expensive. The cache-savings figure in
+section 4 above also shifted down (to $0.0005376) since `hyde` calls are
+now priced at the corrected, cheaper mistral-7b rate. See
+`snowflake/sql/02_tables.sql` and
+`backend/measurement/run_cost_of_intelligence.py`'s `_PRICING` dict for the
+full citation and derivation.
 
 **Token-reduction %:** 34.71% -- weighted across all 280 paper abstracts
 (28 gold-set queries x top-10 retrieved papers each) compressed from
@@ -176,20 +195,22 @@ script's `_PRICING` dict.
 
 **Result:** routing off costs $0.064512 for 56 `hyde` calls
 (claude-3-5-sonnet @ 1.8/9.0 credits per Mtok in/out, $2/credit); routing on
-costs $0.006720 (mistral-7b @ 0.2/0.9 credits per Mtok in/out, placeholder
-rate -- see `snowflake/sql/02_tables.sql` comment). **Delta: $0.057792
-saved, an 89.58% reduction**, on this call volume and token shape.
+costs $0.0010752 (mistral-7b @ 0.03/0.15 credits per Mtok in/out -- OUTPUT
+rate now a real published figure, see the 2026-08-07 update in section 4
+above; INPUT rate still estimated). **Delta: $0.0634368 saved, a 98.33%
+reduction**, on this call volume and token shape.
 
 **Caveat, stated plainly:** the *percentage* reduction is a real
 computation from real code (`model_for_call_site` + `compute_cost_usd`,
-both exercised exactly as production would call them). The *absolute
-dollar* accuracy is bounded by `mistral-7b`'s placeholder pricing row --
-no researched, cited per-token rate for this model was found in this pass
-(unlike `claude-3-5-sonnet`/`claude-sonnet-4-5`, which cite finout.io). A
-human with real Snowflake credentials must reconcile this rate against
+both exercised exactly as production would call them), and the OUTPUT-rate
+half of the dollar figure now rests on a real published Snowflake rate
+(cited above), not a guess. What's still unverified: the INPUT-token rate
+for `mistral-7b` (estimated via ratio, not sourced), and whether the
+published list price matches this specific account's actual billed rate.
+A human with real Snowflake credentials must reconcile both against
 `SNOWFLAKE.ACCOUNT_USAGE` before this $ delta (or `/economics` numbers that
-include cheap-tier calls) is trusted for a real cost claim. This is the
-same reconciliation already flagged for the other two pricing rows in
+include cheap-tier calls) is presented as a final, audited figure. This is
+the same reconciliation already flagged for the other two pricing rows in
 `Decisions.md`.
 
 **Scope:** this only measures the `hyde` call site (one of two cheap-tier

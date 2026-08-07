@@ -77,26 +77,29 @@ CREATE OR REPLACE TABLE NEULIT.CORE.MODEL_PRICING (
 -- availability is region-specific (see Decisions.md and Handoff-Log.md).
 -- Phase E (call-site model routing, backend/app/llm/routing.py) adds
 -- `mistral-7b` as the default cheap-tier model for relevance_check/hyde.
--- PLACEHOLDER RATE, not a researched citation like the two rows above --
--- no discoverable published per-token AI Credit rate for `mistral-7b` was
--- found in this pass (WebSearch turned up Cortex COMPLETE's general
--- per-token credit-consumption model but not a model-specific rate table
--- entry for this model the way claude-sonnet-4-5's finout.io citation
--- gave). Rate below is a conservative placeholder (roughly an order of
--- magnitude cheaper than the claude-3-5-sonnet row, consistent with
--- Mistral 7B's much smaller parameter count vs. Claude 3.5 Sonnet) so
--- routing-on cost math is directionally correct and doesn't silently
--- report $0. MUST be replaced with the account's real
--- SNOWFLAKE.ACCOUNT_USAGE / Service Consumption Table rate for this model
--- before any /economics number that includes cheap-tier calls is trusted
--- for a real cost claim -- flagged in Decisions.md alongside the existing
+-- UPDATED (2026-08-07, WebSearch, no live account cross-check yet):
+-- Snowflake's published AI Credit Consumption Table gives mistral-7b
+-- OUTPUT tokens at $0.30 / 1M tokens under the flat $2.00/credit (Global)
+-- AI Credit system effective 2026-04-01 -- see
+-- https://docs.snowflake.com/en/user-guide/snowflake-cortex/pricing and
+-- https://dataengineerhub.blog/articles/snowflake-cortex-cost-comparison.
+-- $0.30/Mtok-out / $2.00-per-credit = 0.15 credits/Mtok-out -- this
+-- replaces the earlier order-of-magnitude placeholder for the OUTPUT
+-- rate. No model-specific INPUT-token rate was found in this pass either;
+-- the INPUT rate below is still an estimate, derived by applying the same
+-- input:output ratio observed in the claude-3-5-sonnet row (1.8:9.0, i.e.
+-- input is 1/5 of output) to the now-real mistral-7b output rate
+-- (0.15 / 5 = 0.03). MUST still be replaced with the account's real
+-- SNOWFLAKE.ACCOUNT_USAGE / Service Consumption Table INPUT rate for this
+-- model before any /economics number that includes cheap-tier calls is
+-- trusted as final -- flagged in Decisions.md alongside the existing
 -- claude-3-5-sonnet / claude-sonnet-4-5 reconciliation item.
 MERGE INTO NEULIT.CORE.MODEL_PRICING AS tgt
 USING (
   SELECT * FROM VALUES
     ('claude-3-5-sonnet', 1.8, 9.0, 2.0, CURRENT_TIMESTAMP()),
     ('claude-sonnet-4-5', 1.8, 9.0, 2.0, CURRENT_TIMESTAMP()),
-    ('mistral-7b', 0.2, 0.9, 2.0, CURRENT_TIMESTAMP())  -- PLACEHOLDER, see comment above
+    ('mistral-7b', 0.03, 0.15, 2.0, CURRENT_TIMESTAMP())  -- output rate real (see comment above), input rate still estimated
   AS t(MODEL, CREDITS_PER_MTOK_IN, CREDITS_PER_MTOK_OUT, USD_PER_CREDIT, EFFECTIVE_FROM)
 ) AS src
 ON tgt.MODEL = src.MODEL

@@ -55,12 +55,15 @@ _PRICING = {
         credits_per_mtok_out=9.0,
         usd_per_credit=2.0,
     ),
-    # Phase E cheap tier -- placeholder rate, see snowflake/sql/02_tables.sql
-    # comment for why no researched citation exists for this model yet.
+    # Phase E cheap tier -- OUTPUT rate is real (Snowflake published AI
+    # Credit Consumption Table, $0.30/Mtok-out at $2.00/credit = 0.15
+    # credits/Mtok-out), INPUT rate still estimated via the same
+    # input:output ratio as the claude-3-5-sonnet row. See
+    # snowflake/sql/02_tables.sql for the full citation/derivation.
     "mistral-7b": ModelPriceRow(
         model="mistral-7b",
-        credits_per_mtok_in=0.2,
-        credits_per_mtok_out=0.9,
+        credits_per_mtok_in=0.03,
+        credits_per_mtok_out=0.15,
         usd_per_credit=2.0,
     ),
 }
@@ -269,10 +272,13 @@ def measure_routing(cache_result: dict) -> dict:
             f"Real cost delta on {n_hyde_calls} hyde calls (28-query gold "
             "set x 2 issues/query, same call volume measure_cache() above "
             "actually executed), computed via the real compute_cost_usd() "
-            "against both MODEL_PRICING rows in _PRICING. mistral-7b's rate "
-            "is a placeholder (see snowflake/sql/02_tables.sql comment) -- "
-            "the % reduction is a real computation but its absolute $ "
-            "accuracy is bounded by that placeholder until a real rate is "
+            "against both MODEL_PRICING rows in _PRICING. mistral-7b's "
+            "OUTPUT-token rate is now a real published Snowflake AI Credit "
+            "rate ($0.30/Mtok-out, see snowflake/sql/02_tables.sql "
+            "comment); its INPUT-token rate is still an estimate. The % "
+            "reduction is a real computation from real code, but the "
+            "absolute $ accuracy is bounded by the unverified input rate "
+            "and by the published-vs-account-billed rate gap until "
             "reconciled against a live account."
         ),
     }
