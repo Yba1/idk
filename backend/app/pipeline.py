@@ -94,14 +94,25 @@ def _load_memory_with_budget(
     Returns empty defaults and applied=False on timeout or any failure.
     """
     default = (ResearcherProfile(user_id=user_id, specialty=None), set(), False)
-    pool = ThreadPoolExecutor(max_workers=2)
+    pool = ThreadPoolExecutor(max_workers=3)
     try:
         profile_future = pool.submit(memory.get_profile, user_id)
         seen_future = pool.submit(memory.seen_pmids, user_id)
-        _, not_done = wait([profile_future, seen_future], timeout=MEMORY_BUDGET_SECONDS)
+        # health() rides the same budget: get_profile/seen_pmids return an
+        # empty default (not an error) when the backend is unset or
+        # unreachable, so a fast "success" full of defaults would otherwise
+        # be indistinguishable from a fast success full of real data. Only
+        # health() tells us honestly whether personalization is real.
+        health_future = pool.submit(memory.health)
+        _, not_done = wait(
+            [profile_future, seen_future, health_future], timeout=MEMORY_BUDGET_SECONDS
+        )
         if not_done:
             return default
-        return profile_future.result(), seen_future.result(), True
+        profile, seen, health = profile_future.result(), seen_future.result(), health_future.result()
+        if not health.get("ok", False):
+            return default
+        return profile, seen, True
     except Exception:
         return default
     finally:

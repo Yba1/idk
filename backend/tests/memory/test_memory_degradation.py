@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from backend.api.main import app
 from backend.contracts.fakes import FakeLedger, FakeLLM, FakeRetrieval
+from backend.contracts.models import ResearcherProfile
 from backend.contracts.registry import Services
 
 client = TestClient(app)
@@ -40,6 +41,52 @@ class _RaisingMemory:
 
 def _raising_services() -> Services:
     return Services(retrieval=FakeRetrieval(), llm=FakeLLM(), memory=_RaisingMemory(), ledger=FakeLedger())
+
+
+class _UnconfiguredMemory:
+    """Mirrors EverOSMemory's actual unconfigured behavior: reads return fast,
+    empty defaults *without raising* - the regression this guards against is
+    treating "returned quickly" as "personalization actually happened."
+    """
+
+    def get_profile(self, user_id):
+        return ResearcherProfile(user_id=user_id, specialty=None)
+
+    def get_thread(self, user_id, session_id):
+        raise AssertionError("get_thread is not on the query hot path")
+
+    def record_query(self, *a, **kw):
+        pass
+
+    def record_papers_shown(self, *a, **kw):
+        pass
+
+    def seen_pmids(self, user_id):
+        return set()
+
+    def set_specialty(self, *a, **kw):
+        pass
+
+    def forget(self, user_id):
+        pass
+
+    def health(self):
+        return {"ok": False, "detail": "EVEROS_API_KEY/EVEROS_BASE_URL not set"}
+
+
+def test_query_reports_memory_applied_false_when_backend_is_unconfigured_but_not_raising(monkeypatch):
+    services = Services(retrieval=FakeRetrieval(), llm=FakeLLM(), memory=_UnconfiguredMemory(), ledger=FakeLedger())
+    monkeypatch.setattr("backend.app.pipeline.get_services", lambda: services)
+
+    response = client.post("/query", json={
+        "query": "scalp lesion uptake",
+        "session_id": "s1",
+        "user_id": "u1",
+        "personalize": True,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["memory"]["applied"] is False
 
 
 def test_query_returns_200_with_memory_applied_false_when_backend_raises_on_every_call(monkeypatch):

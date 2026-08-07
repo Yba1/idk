@@ -1,6 +1,6 @@
 import json
 
-from backend.app.summary.generate import generate_sourced_summary
+from backend.app.summary.generate import SUMMARY_SYSTEM_PROMPT, generate_sourced_summary
 from backend.tests._stub_llm import StubLLM, make_scored_paper
 
 
@@ -79,3 +79,27 @@ def test_no_distilled_context_means_no_extra_system_message():
 
     _, messages = llm.calls[0]
     assert not any("reader is described as" in m.content for m in messages)
+
+
+def test_personalization_never_weakens_the_citation_requirement():
+    """Every sentence still carries a numbered citation, personalized or not
+    - the distilled_context message is additive, never a replacement for the
+    citation-instruction system prompt."""
+    papers = [make_scored_paper("p1")]
+    llm = StubLLM({"summary": json.dumps({"summary_markdown": "Findings [1]."})})
+
+    generate_sourced_summary(
+        llm, "query", papers, distilled_context="neuroradiology resident",
+        request_id="r1", session_id="s1", user_id="u1",
+    )
+
+    _, personalized_messages = llm.calls[0]
+    assert any(m.content == SUMMARY_SYSTEM_PROMPT for m in personalized_messages)
+
+    llm2 = StubLLM({"summary": json.dumps({"summary_markdown": "Findings [1]."})})
+    generate_sourced_summary(llm2, "query", papers, request_id="r2", session_id="s1", user_id="u1")
+    _, plain_messages = llm2.calls[0]
+
+    # Same constant, byte-for-byte, in both calls - personalization adds a
+    # message, it never edits this one.
+    assert any(m.content == SUMMARY_SYSTEM_PROMPT for m in plain_messages)
