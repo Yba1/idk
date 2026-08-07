@@ -75,11 +75,28 @@ CREATE OR REPLACE TABLE NEULIT.CORE.MODEL_PRICING (
 -- SNOWFLAKE.ACCOUNT_USAGE / Service Consumption Table once live -- list
 -- prices can differ from an account's actual billed rate, and Cortex model
 -- availability is region-specific (see Decisions.md and Handoff-Log.md).
+-- Phase E (call-site model routing, backend/app/llm/routing.py) adds
+-- `mistral-7b` as the default cheap-tier model for relevance_check/hyde.
+-- PLACEHOLDER RATE, not a researched citation like the two rows above --
+-- no discoverable published per-token AI Credit rate for `mistral-7b` was
+-- found in this pass (WebSearch turned up Cortex COMPLETE's general
+-- per-token credit-consumption model but not a model-specific rate table
+-- entry for this model the way claude-sonnet-4-5's finout.io citation
+-- gave). Rate below is a conservative placeholder (roughly an order of
+-- magnitude cheaper than the claude-3-5-sonnet row, consistent with
+-- Mistral 7B's much smaller parameter count vs. Claude 3.5 Sonnet) so
+-- routing-on cost math is directionally correct and doesn't silently
+-- report $0. MUST be replaced with the account's real
+-- SNOWFLAKE.ACCOUNT_USAGE / Service Consumption Table rate for this model
+-- before any /economics number that includes cheap-tier calls is trusted
+-- for a real cost claim -- flagged in Decisions.md alongside the existing
+-- claude-3-5-sonnet / claude-sonnet-4-5 reconciliation item.
 MERGE INTO NEULIT.CORE.MODEL_PRICING AS tgt
 USING (
   SELECT * FROM VALUES
     ('claude-3-5-sonnet', 1.8, 9.0, 2.0, CURRENT_TIMESTAMP()),
-    ('claude-sonnet-4-5', 1.8, 9.0, 2.0, CURRENT_TIMESTAMP())
+    ('claude-sonnet-4-5', 1.8, 9.0, 2.0, CURRENT_TIMESTAMP()),
+    ('mistral-7b', 0.2, 0.9, 2.0, CURRENT_TIMESTAMP())  -- PLACEHOLDER, see comment above
   AS t(MODEL, CREDITS_PER_MTOK_IN, CREDITS_PER_MTOK_OUT, USD_PER_CREDIT, EFFECTIVE_FROM)
 ) AS src
 ON tgt.MODEL = src.MODEL

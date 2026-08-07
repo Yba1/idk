@@ -35,6 +35,7 @@ from pathlib import Path
 from backend.app.llm.cache import TTLPromptCache, cache_key
 from backend.app.llm.compress import aggregate_reduction_pct, compress_papers_for_prompt
 from backend.app.llm.pricing import ModelPriceRow, compute_cost_usd
+from backend.app.llm.routing import model_for_call_site
 from backend.contracts.fakes import FakeLedger, FakeRetrieval
 from backend.contracts.models import Message
 from backend.measurement.run_gate import GOLD_SET
@@ -53,7 +54,15 @@ _PRICING = {
         credits_per_mtok_in=1.8,
         credits_per_mtok_out=9.0,
         usd_per_credit=2.0,
-    )
+    ),
+    # Phase E cheap tier -- placeholder rate, see snowflake/sql/02_tables.sql
+    # comment for why no researched citation exists for this model yet.
+    "mistral-7b": ModelPriceRow(
+        model="mistral-7b",
+        credits_per_mtok_in=0.2,
+        credits_per_mtok_out=0.9,
+        usd_per_credit=2.0,
+    ),
 }
 
 
@@ -187,17 +196,101 @@ def measure_cost_reduction(compression: dict, cache_result: dict) -> dict:
     }
 
 
+def measure_routing(cache_result: dict) -> dict:
+    """Phase E: routing-on vs routing-off cost delta on the same 28-query
+    gold set's `hyde` call volume the cache measurement above already
+    executed (56 calls = 28 queries x 2 issues/query, per
+    `measure_cache`'s `n_hyde_calls_issued`), using the same per-call token
+    shape the cache measurement's stub returns (120 prompt / 40 completion
+    tokens -- see `_stub_complete_response`) and the real
+    `compute_cost_usd()` function against both pricing rows in `_PRICING`.
+
+    "Routing off" = every call_site uses SNOWFLAKE_CORTEX_MODEL
+    (claude-3-5-sonnet), matching pre-Phase-E behavior and the backward-
+    compat fallback in backend/app/llm/routing.py. "Routing on" = default
+    tiers with no env vars set (`model_for_call_site` resolves hyde to the
+    cheap-tier default, mistral-7b). Both branches call the real
+    `model_for_call_site` function; only os.environ is toggled between them.
+    """
+    import os as _os
+
+    n_hyde_calls = cache_result["n_hyde_calls_issued"]
+    per_call_prompt_tokens = 120
+    per_call_completion_tokens = 40
+
+    saved_env = {
+        k: _os.environ.get(k)
+        for k in ("SNOWFLAKE_CORTEX_MODEL", "SNOWFLAKE_CORTEX_MODEL_CHEAP", "SNOWFLAKE_CORTEX_MODEL_STRONG")
+    }
+    try:
+        # Routing off: single-model env var set, matching pre-Phase-E config.
+        _os.environ["SNOWFLAKE_CORTEX_MODEL"] = "claude-3-5-sonnet"
+        _os.environ.pop("SNOWFLAKE_CORTEX_MODEL_CHEAP", None)
+        _os.environ.pop("SNOWFLAKE_CORTEX_MODEL_STRONG", None)
+        model_off = model_for_call_site("hyde")
+        cost_per_call_off = compute_cost_usd(
+            per_call_prompt_tokens, per_call_completion_tokens, model_off, _PRICING
+        )
+
+        # Routing on: no env vars, hardcoded per-tier defaults apply.
+        _os.environ.pop("SNOWFLAKE_CORTEX_MODEL", None)
+        _os.environ.pop("SNOWFLAKE_CORTEX_MODEL_CHEAP", None)
+        _os.environ.pop("SNOWFLAKE_CORTEX_MODEL_STRONG", None)
+        model_on = model_for_call_site("hyde")
+        cost_per_call_on = compute_cost_usd(
+            per_call_prompt_tokens, per_call_completion_tokens, model_on, _PRICING
+        )
+    finally:
+        for k, v in saved_env.items():
+            if v is None:
+                _os.environ.pop(k, None)
+            else:
+                _os.environ[k] = v
+
+    total_cost_off = round(cost_per_call_off * n_hyde_calls, 8)
+    total_cost_on = round(cost_per_call_on * n_hyde_calls, 8)
+    delta_usd = round(total_cost_off - total_cost_on, 8)
+    reduction_pct = round(100 * delta_usd / total_cost_off, 2) if total_cost_off else 0.0
+
+    return {
+        "call_site": "hyde",
+        "n_calls": n_hyde_calls,
+        "per_call_prompt_tokens": per_call_prompt_tokens,
+        "per_call_completion_tokens": per_call_completion_tokens,
+        "model_routing_off": model_off,
+        "model_routing_on": model_on,
+        "cost_per_call_usd_routing_off": cost_per_call_off,
+        "cost_per_call_usd_routing_on": cost_per_call_on,
+        "total_cost_usd_routing_off": total_cost_off,
+        "total_cost_usd_routing_on": total_cost_on,
+        "delta_usd": delta_usd,
+        "reduction_pct": reduction_pct,
+        "note": (
+            f"Real cost delta on {n_hyde_calls} hyde calls (28-query gold "
+            "set x 2 issues/query, same call volume measure_cache() above "
+            "actually executed), computed via the real compute_cost_usd() "
+            "against both MODEL_PRICING rows in _PRICING. mistral-7b's rate "
+            "is a placeholder (see snowflake/sql/02_tables.sql comment) -- "
+            "the % reduction is a real computation but its absolute $ "
+            "accuracy is bounded by that placeholder until a real rate is "
+            "reconciled against a live account."
+        ),
+    }
+
+
 def main() -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     compression = measure_compression()
     cache_result = measure_cache()
     cost = measure_cost_reduction(compression, cache_result)
+    routing = measure_routing(cache_result)
 
     out = {
         "compression": compression,
         "cache": cache_result,
         "cost": cost,
+        "routing": routing,
     }
     (RESULTS_DIR / "cost_of_intelligence.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
 
@@ -215,6 +308,12 @@ def main() -> None:
     print(f"baseline_cost_usd={cost['baseline_cost_usd_per_summary_call']}")
     print(f"reduced_cost_usd={cost['reduced_cost_usd_per_summary_call']}")
     print(f"estimated_cost_reduction_pct={cost['estimated_cost_reduction_pct']}%")
+    print()
+    print("=== Routing (Phase E, hyde call-site cost delta) ===")
+    print(f"n_calls={routing['n_calls']} model_off={routing['model_routing_off']} model_on={routing['model_routing_on']}")
+    print(f"total_cost_usd_routing_off={routing['total_cost_usd_routing_off']}")
+    print(f"total_cost_usd_routing_on={routing['total_cost_usd_routing_on']}")
+    print(f"delta_usd={routing['delta_usd']} reduction_pct={routing['reduction_pct']}%")
 
 
 if __name__ == "__main__":

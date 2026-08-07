@@ -123,3 +123,32 @@ should NOT be touched — they don't build multi-paper abstract prompts.
 
 **Owner:** Card 2A. Not resolved by Card 1 because `backend/app/pipeline.py`
 is outside Card 1's ownership bucket (`scripts/ownership.txt`).
+
+## [c1] .env.example needs two new optional env vars documented (Phase E routing)
+
+**File:** `.env.example` (repo root, not in Card 1's ownership bucket per
+`scripts/ownership.txt` -- not listed there at all, so not touched
+unilaterally).
+
+**Context:** Phase E (`backend/app/llm/routing.py`, wired into
+`CortexLLMClient.chat()` in `backend/snowflake/llm.py`) adds two new
+optional env vars: `SNOWFLAKE_CORTEX_MODEL_CHEAP` and
+`SNOWFLAKE_CORTEX_MODEL_STRONG`. Both are optional -- if unset, the
+existing `SNOWFLAKE_CORTEX_MODEL` is used for every call site exactly as
+before (backward compatible, no behavior change for anyone not opting in).
+
+**Requested change:** add, near the existing `SNOWFLAKE_CORTEX_MODEL=
+claude-3-5-sonnet` line:
+
+```
+SNOWFLAKE_CORTEX_MODEL_CHEAP=
+SNOWFLAKE_CORTEX_MODEL_STRONG=
+```
+
+with a short comment noting they're optional per-call-site-tier overrides
+(see `backend/app/llm/routing.py`'s module docstring for the full
+priority order and default model choices).
+
+**Owner:** whoever owns `.env.example` (unclear from `scripts/ownership.txt`
+which doesn't mention this file at all -- flagged here rather than edited
+unilaterally, per the same out-of-bucket rule as the other entries above).

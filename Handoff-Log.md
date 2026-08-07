@@ -137,6 +137,107 @@ must do to finish" below), and Card 2A resolving `backend/api/dependencies.py`
 so `NEULIT_PROFILE=live_no_memory` can run `/query` end to end once
 credentials exist.
 
+## Update — 2026-08-07: Phase E — call-site model routing, still no
+Snowflake credentials
+
+New `backend/app/llm/routing.py`: maps `CallSite` -> "cheap" or "strong"
+model tier. `relevance_check`/`hyde` (binary-gate / query-expansion,
+quality-tolerant) route to a cheap model; `summary`/`citation_check`/
+`refine`/`memory_distill` (output a user or citation-verifier directly
+reads, or a persisted memory summary) route to a strong model. Resolution
+order, documented in the module docstring: `SNOWFLAKE_CORTEX_MODEL_CHEAP` /
+`SNOWFLAKE_CORTEX_MODEL_STRONG` env vars if set, else the existing
+`SNOWFLAKE_CORTEX_MODEL` single-model var for both tiers (full backward
+compatibility with pre-Phase-E config), else hardcoded defaults
+(`mistral-7b` cheap / `claude-3-5-sonnet` strong — the strong default
+matches the pre-existing `_DEFAULT_MODEL`, so routing is a cost/behavior
+no-op for the four strong-tier call sites out of the box).
+
+Wired into `CortexLLMClient.chat()` (`backend/snowflake/llm.py`): `model =
+model_for_call_site(call_site)` now replaces the old fixed
+`_active_model()` call at the top of `chat()`. `_active_model()` itself is
+kept (used by `health()`, which reports readiness independent of any one
+call site). `TokenUsage.model` and the `LedgerEvent` written in the
+`finally` block both reflect the actually-used per-call model — verified
+by new tests asserting `ledger.events[0].usage.model` matches the routed
+model, not a hardcoded value. No changes needed to `compute_cost_usd` /
+`MODEL_PRICING` lookup — it already keys by model name, so cost math
+naturally follows whichever model served the call.
+
+**MODEL_PRICING seed** (`snowflake/sql/02_tables.sql`): added a `mistral-7b`
+row so the cheap tier's cost math never silently reports $0. No researched,
+cited per-token rate was found for this model in this pass (unlike the
+existing `claude-3-5-sonnet`/`claude-sonnet-4-5` rows, cited to
+finout.io) — the row is a clearly-labeled placeholder (order-of-magnitude
+estimate vs. the existing rows, given Mistral 7B's much smaller parameter
+count), flagged for reconciliation against a live account the same way the
+other two rows already are.
+
+**Tests:** new `backend/tests/snowflake/test_model_routing.py` — tier
+membership matches the phase card; `model_for_call_site` resolution with no
+env vars (hardcoded defaults), with only `SNOWFLAKE_CORTEX_MODEL` set
+(both tiers fall back to it), and with both tier-specific vars set
+(override priority); plus `CortexLLMClient.chat()` wiring tests confirming
+the resolved model shows up in `ChatResult.usage.model` and the written
+`LedgerEvent` for both a cheap-tier (`hyde`) and strong-tier (`summary`)
+call site, tier-specific env-var overrides taking effect mid-run, and the
+single-var backward-compat path across all six call sites. Two of the new
+chat-wiring tests install an isolated `TTLPromptCache` instance (same
+pattern as `test_cache.py`) since `hyde`/`relevance_check` are cache-
+eligible and the module-level default cache is shared process-wide —
+without this, a cached entry from an earlier test module (which now also
+resolves to `mistral-7b` under the same default routing) produced a false
+cache hit that skipped the `_call_complete` assertion. Full Tier 1 suite
+re-run: **`57 passed, 4 skipped`** in `backend/tests/snowflake`
+(`.venv-c1/Scripts/python -m pytest backend/tests/snowflake -q`) — the 4
+skips are the pre-existing `@pytest.mark.live` tests, no credentials. The
+broader `backend/tests` run still hits the pre-existing Card 2A
+`dependencies.py` import blocker (documented above) for 12 unrelated
+modules; excluding those, **`82 passed, 4 skipped`**.
+
+**Measurement:** `backend/measurement/run_cost_of_intelligence.py` gained
+`measure_routing()` — a real routing-on vs routing-off cost delta on the
+same 56 `hyde` calls (28-query gold set x 2 issues/query) the existing
+cache measurement already executes, at that measurement's per-call token
+shape (120 prompt / 40 completion), using the real `model_for_call_site()`
+and `compute_cost_usd()` functions with `os.environ` toggled between the
+two configurations. Real measured result from an actual run:
+
+```
+$ python -m backend.measurement.run_cost_of_intelligence
+=== Routing (Phase E, hyde call-site cost delta) ===
+n_calls=56 model_off=claude-3-5-sonnet model_on=mistral-7b
+total_cost_usd_routing_off=0.064512
+total_cost_usd_routing_on=0.00672
+delta_usd=0.057792 reduction_pct=89.58%
+```
+
+**$0.057792 saved (89.58% reduction) on this call volume/shape.** Bounded
+by the placeholder `mistral-7b` rate — see the caveat in
+`backend/measurement/results/decision.md` section 5 and
+`snowflake/sql/02_tables.sql`'s comment. `decision.md` section 4's cache
+numbers were also refreshed in this pass: `measure_cache()` calls the real
+`chat()` path, which now routes `hyde` to `mistral-7b` by default, so
+`estimated_cost_saved_usd` changed from the old run's $0.032256 (priced at
+claude-3-5-sonnet) to $0.00336 (priced at mistral-7b) for the same 28
+hits — noted inline in `decision.md` so the change isn't mistaken for a
+regression.
+
+**Files added:** `backend/app/llm/routing.py`,
+`backend/tests/snowflake/test_model_routing.py`.
+**Files changed:** `backend/snowflake/llm.py` (routing wired into
+`chat()`), `snowflake/sql/02_tables.sql` (mistral-7b pricing seed),
+`backend/measurement/run_cost_of_intelligence.py` (`measure_routing()`),
+`backend/measurement/results/decision.md` (new section 5, section 4
+numbers refreshed), `backend/measurement/results/cost_of_intelligence.json`
+(refreshed by the re-run), `Blockers.md` (new hand-off note: `.env.example`
+needs `SNOWFLAKE_CORTEX_MODEL_CHEAP`/`_STRONG` documented — that file isn't
+in Card 1's ownership bucket per `scripts/ownership.txt`, so it wasn't
+edited directly).
+
+Not blocked on anything new. Same two outstanding blockers as before
+(human with real Snowflake credentials; Card 2A's `dependencies.py` fix).
+
 ## Summary status against phase card §6 Definition of Done
 
 - [x] All four SQL files written (`snowflake/sql/01_setup.sql` through
