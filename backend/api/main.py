@@ -54,6 +54,9 @@ app.include_router(atlas_router)
 app.include_router(economics_router)   # stub at freeze; Card 1 fills the module
 app.include_router(memory_router)      # stub at freeze; Card 2A fills the module
 
+from backend.memex.wire import attach  # noqa: E402
+attach(app)
+
 
 @app.get("/health")
 def health() -> dict:
