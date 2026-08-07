@@ -10,7 +10,7 @@ Snowflake Cortex Search + rarity re-rank did not cost retrieval quality.
 
 **What's computed here:** recall@10 for `backend.contracts.fakes.FakeRetrieval`
 (deterministic token-overlap + rarity scoring over `backend/data/corpus.json`,
-n=14 gold-set queries) -- this stands in for "the
+n=28 gold-set queries) -- this stands in for "the
 retrieval-quality floor a local lexical scorer with the same rarity formula
 achieves," since it is architecturally comparable to v1's BM25+MiniLM
 baseline and needs no credentials.
@@ -23,9 +23,9 @@ once the search service is `ACTIVE` (see `snowflake/sql/README.md`), and
 report the `CortexSearchRetriever` recall@10 alongside the numbers below to
 actually close this claim.
 
-| Overall recall@10 (FakeRetrieval baseline, n=14) | Rare-condition recall@10 (n=10) |
+| Overall recall@10 (FakeRetrieval baseline, n=28) | Rare-condition recall@10 (n=20) |
 |---|---|
-| 0.59 | 0.65 |
+| 0.60 | 0.67 |
 
 Per-query detail:
 
@@ -45,6 +45,20 @@ Per-query detail:
 | temporal lobe epilepsy interictal FDG-PET | Temporal lobe epilepsy interictal FDG-PET | no | 0.70 |
 | acute ischemic stroke MCA territory PET | Acute ischemic stroke MCA territory acute phase | no | 0.60 |
 | Parkinson's disease basal ganglia PET | Parkinson's disease motor form later stage | no | 0.50 |
+| cutaneous angiosarcoma helical tomotherapy scalp brachytherapy | Scalp angiosarcoma | yes | 1.00 |
+| Huntington disease presenting as primary progressive aphasia semantics | Primary progressive aphasia semantic variant | yes | 0.30 |
+| flortaucipir PET MRI 4R tauopathy corticobasal degeneration | Corticobasal syndrome | yes | 0.40 |
+| AV1451 tau retention progressive supranuclear palsy eye movement disorder | Progressive supranuclear palsy | yes | 0.50 |
+| MAPT mutation behavioral variant frontotemporal dementia biomarker | Frontotemporal dementia | yes | 0.70 |
+| DPA-714 PET MRI neuroinflammation sporadic Creutzfeldt-Jakob disease | Creutzfeldt-Jakob disease | yes | 0.90 |
+| amyloid positivity probable dementia with Lewy bodies REM sleep behavior disorder | Dementia with Lewy bodies | yes | 0.90 |
+| NMDAR GFAP mGluR5 tripartite autoantibody autoimmune encephalitis | Anti-NMDA receptor encephalitis | yes | 0.90 |
+| granulomatous primary angiitis central nervous system brain PET MRI | Primary angiitis of CNS | yes | 0.60 |
+| diffuse large B-cell lymphoma central peripheral nervous system involvement | Neurolymphomatosis CNS involvement | yes | 0.75 |
+| amyloid PET typical Alzheimer's disease biomarker pattern | Alzheimer's disease probable typical FDG-PET pattern | no | 0.00 |
+| interictal FDG-PET hypometabolism seizure focus localization epilepsy | Temporal lobe epilepsy interictal FDG-PET | no | 0.70 |
+| middle cerebral artery territory infarct acute stroke perfusion imaging | Acute ischemic stroke MCA territory acute phase | no | 0.80 |
+| nigrostriatal dopaminergic degeneration motor Parkinson's disease imaging | Parkinson's disease motor form later stage | no | 0.20 |
 
 ## 2. Cost per query
 

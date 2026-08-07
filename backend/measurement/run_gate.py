@@ -6,7 +6,9 @@ answer the question the new stack actually raises:
 
 1. Retrieval parity -- does Cortex Search + rarity re-rank cost retrieval
    quality versus the v1 BM25+MiniLM baseline? recall@10 and
-   rare-condition-recall@10 on a gold-set of scope-in queries.
+   rare-condition-recall@10 on a gold-set of scope-in queries (28 queries,
+   two independently-worded queries per one of the 14 corpus conditions,
+   expanded from the original 14 for statistical significance).
 2. Cost per query -- median/p95 cost_usd per /query, by call site, from
    NEULIT.CORE.V_COST_PER_REQUEST.
 3. Latency per call site -- median/p95, from the same source.
@@ -53,6 +55,25 @@ GOLD_SET: list[tuple[str, str]] = [
     ("temporal lobe epilepsy interictal FDG-PET", "Temporal lobe epilepsy interictal FDG-PET"),
     ("acute ischemic stroke MCA territory PET", "Acute ischemic stroke MCA territory acute phase"),
     ("Parkinson's disease basal ganglia PET", "Parkinson's disease motor form later stage"),
+    # --- second query per condition, added to make recall@10 a more
+    # statistically meaningful number (14 -> 28 queries). Phrasing drawn
+    # from a second, differently-worded paper title/theme per condition in
+    # backend/data/corpus.json, so each condition now has two independent
+    # query formulations rather than one.
+    ("cutaneous angiosarcoma helical tomotherapy scalp brachytherapy", "Scalp angiosarcoma"),
+    ("Huntington disease presenting as primary progressive aphasia semantics", "Primary progressive aphasia semantic variant"),
+    ("flortaucipir PET MRI 4R tauopathy corticobasal degeneration", "Corticobasal syndrome"),
+    ("AV1451 tau retention progressive supranuclear palsy eye movement disorder", "Progressive supranuclear palsy"),
+    ("MAPT mutation behavioral variant frontotemporal dementia biomarker", "Frontotemporal dementia"),
+    ("DPA-714 PET MRI neuroinflammation sporadic Creutzfeldt-Jakob disease", "Creutzfeldt-Jakob disease"),
+    ("amyloid positivity probable dementia with Lewy bodies REM sleep behavior disorder", "Dementia with Lewy bodies"),
+    ("NMDAR GFAP mGluR5 tripartite autoantibody autoimmune encephalitis", "Anti-NMDA receptor encephalitis"),
+    ("granulomatous primary angiitis central nervous system brain PET MRI", "Primary angiitis of CNS"),
+    ("diffuse large B-cell lymphoma central peripheral nervous system involvement", "Neurolymphomatosis CNS involvement"),
+    ("amyloid PET typical Alzheimer's disease biomarker pattern", "Alzheimer's disease probable typical FDG-PET pattern"),
+    ("interictal FDG-PET hypometabolism seizure focus localization epilepsy", "Temporal lobe epilepsy interictal FDG-PET"),
+    ("middle cerebral artery territory infarct acute stroke perfusion imaging", "Acute ischemic stroke MCA territory acute phase"),
+    ("nigrostriatal dopaminergic degeneration motor Parkinson's disease imaging", "Parkinson's disease motor form later stage"),
 ]
 
 RARE_CONDITIONS = {
