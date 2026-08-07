@@ -7,6 +7,7 @@ export const DEMO_SESSION_ID = "demo-session";
 export type QueryResult = components["schemas"]["QueryResponse"];
 export type TraceEntry = components["schemas"]["TraceRoundOut"];
 export type ScoredPaper = components["schemas"]["ScoredPaperOut"];
+export type CitationOut = components["schemas"]["CitationOut"];
 export type Condition = components["schemas"]["ConditionOut"];
 export type ContrastPaper = components["schemas"]["ContrastPaperOut"];
 export type DemoContrast = components["schemas"]["DemoContrastResponse"];

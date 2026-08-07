@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Masthead } from "@/components/masthead";
 import { Hero } from "@/components/hero";
 import { QueryForm } from "@/components/query-form";
 import { SourcedSummary } from "@/components/sourced-summary";
@@ -10,6 +11,7 @@ import type { QueryResult } from "@/lib/api";
 
 export default function Home() {
   const [result, setResult] = useState<QueryResult | null>(null);
+  const [lastQuery, setLastQuery] = useState<string | null>(null);
   const [profileRefresh, setProfileRefresh] = useState(0);
   const resultsRef = useRef<HTMLDivElement>(null);
   const citedConditionNames = result
@@ -29,20 +31,17 @@ export default function Home() {
 
   return (
     <>
-      <Hero />
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-24 px-6 py-16 md:px-12">
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <QueryForm onResult={handleResult} />
-          <ProfilePanel refreshKey={profileRefresh} />
-        </div>
-
+      <Masthead />
+      <main className="flex flex-1 flex-col">
+        <Hero />
+        <QueryForm onResult={handleResult} onCurrentQueryChange={setLastQuery} />
         <BrainViewer citedConditionNames={citedConditionNames} />
-
         {result && (
           <div ref={resultsRef}>
             <SourcedSummary result={result} />
           </div>
         )}
+        <ProfilePanel refreshKey={profileRefresh} result={result} lastQuery={lastQuery} />
       </main>
     </>
   );

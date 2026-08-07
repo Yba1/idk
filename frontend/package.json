@@ -11,6 +11,7 @@
     "types:gen": "curl -s http://localhost:8000/openapi.json -o .openapi.json && openapi-typescript .openapi.json -o src/lib/api-types.ts"
   },
   "dependencies": {
+    "animejs": "^4.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.25.0",

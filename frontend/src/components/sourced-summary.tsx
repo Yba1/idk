@@ -1,156 +1,305 @@
-import type { QueryResult, ScoredPaper } from "@/lib/api";
-import { RarityComparison } from "@/components/rarity-comparison";
+import type { QueryResult, ScoredPaper, CitationOut } from "@/lib/api";
 import { RetrievalTrace } from "@/components/retrieval-trace";
-import { SectionGlow } from "@/components/section-glow";
+import { SectionRail } from "@/components/section-rail";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-function SummaryText({ text }: { text: string }) {
-  return text.split(/(\[\d+\])/g).map((part, index) => {
-    const citation = part.match(/^\[(\d+)\]$/);
-    return citation ? (
-      <sup key={`${part}-${index}`}>
-        <a className="font-body text-xs font-bold text-rare hover:underline" href={`#citation-${citation[1]}`}>
-          {part}
-        </a>
-      </sup>
-    ) : (
-      <span key={index}>{part.replaceAll("**", "")}</span>
-    );
-  });
+const SENTENCE_SPLIT_RE = /(?<=[.!?])\s+(?=[A-Z0-9])/;
+const MARKER_RE = /\[(\d+)\]/g;
+
+type Sentence = {
+  text: string;
+  markerIndex: number | null;
+};
+
+function splitIntoSentences(markdown: string): Sentence[] {
+  if (!markdown.trim()) return [];
+  return markdown
+    .split(SENTENCE_SPLIT_RE)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((text) => {
+      const markers = [...text.matchAll(MARKER_RE)].map((m) => Number(m[1]));
+      return { text, markerIndex: markers.length ? markers[markers.length - 1] : null };
+    });
 }
 
-function MemoryMarker({ paper }: { paper: ScoredPaper }) {
-  if (paper.memoryMultiplier < 1) {
-    return <span className="rounded-full bg-common/10 px-2 py-1 text-[11px] text-common">Seen before</span>;
-  }
-  if (paper.memoryMultiplier > 1) {
+function CitationMarker({ citation }: { citation: CitationOut | undefined }) {
+  if (!citation) return null;
+  if (citation.supported === true) {
     return (
-      <span className="rounded-full bg-rare/10 px-2 py-1 text-[11px] text-rare">
-        Builds on your work in {paper.paper.condition}
+      <span className="rounded-[2px] border border-blue-200 bg-blue-100 px-1.5 py-0.5 font-data text-[11px] font-semibold text-blue-800">
+        [{citation.index}]
       </span>
     );
   }
-  return null;
+  if (citation.supported === false) {
+    return (
+      <span className="rounded-[2px] border border-warn bg-warn-bg px-1.5 py-0.5 font-data text-[11px] font-semibold text-warn">
+        [{citation.index}]
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-[2px] border border-rule bg-white px-1.5 py-0.5 font-data text-[11px] font-semibold text-dim opacity-45">
+      [{citation.index}]
+    </span>
+  );
 }
 
-function CostDetails({ result }: { result: QueryResult }) {
+function SummaryBody({ result }: { result: QueryResult }) {
+  const citationsByIndex = new Map(result.citations.map((c) => [c.index, c]));
+  const sentences = splitIntoSentences(result.summary_markdown);
+
   return (
-    <details className="mt-8 border-t border-line pt-5 font-body text-sm">
-      <summary className="cursor-pointer text-mist hover:text-ink">
-        This answer cost ${result.cost.cost_usd.toFixed(5)} · {result.cost.total_tokens.toLocaleString()} tokens
-      </summary>
-      <div className="mt-4 grid gap-2">
-        {Object.entries(result.cost.by_call_site).map(([site, cost]) => (
-          <div key={site} className="flex justify-between gap-4 text-mist">
-            <span>{site.replaceAll("_", " ")}</span>
-            <span className="font-data text-ink">{cost.tokens.toLocaleString()} · ${cost.cost_usd.toFixed(5)}</span>
+    <div>
+      {sentences.map((sentence, i) => {
+        const citation = sentence.markerIndex !== null ? citationsByIndex.get(sentence.markerIndex) : undefined;
+        const unsupported = citation?.supported === false;
+        return (
+          <div
+            key={i}
+            className={`grid items-start gap-[22px] border-t border-blue-200 py-4 first:border-t-0 ${
+              unsupported ? "border-l-2 border-l-warn bg-warn-bg-soft pl-[18px]" : ""
+            }`}
+            style={{ gridTemplateColumns: "56px minmax(0,1fr)" }}
+          >
+            <span className="flex justify-end pt-[7px]">
+              <CitationMarker citation={citation} />
+            </span>
+            <div>
+              <p className="font-body text-lg leading-[1.72] text-ink" style={{ textWrap: "pretty" }}>
+                {sentence.text.replace(MARKER_RE, "").trim()}
+              </p>
+              {unsupported && citation?.note && (
+                <p className="mt-1.5 font-body text-[12.5px] text-warn">{citation.note}</p>
+              )}
+            </div>
           </div>
-        ))}
+        );
+      })}
+
+      <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 border-t border-rule pt-4">
+        <Key tone="verified" label="Verified against source abstract" />
+        <Key tone="unsupported" label="Unsupported — shown, not hidden" />
+        <Key tone="pending" label="Verification pending" />
       </div>
-    </details>
+    </div>
+  );
+}
+
+function Key({ tone, label }: { tone: "verified" | "unsupported" | "pending"; label: string }) {
+  const dot = tone === "verified" ? "bg-blue-600" : tone === "unsupported" ? "bg-warn" : "border border-rule bg-white";
+  return (
+    <span className="flex items-center gap-1.5 font-body text-xs text-dim">
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {label}
+    </span>
+  );
+}
+
+function SourceList({ result }: { result: QueryResult }) {
+  const papersByPmid = new Map(result.papers.map((p) => [p.paper.pmid, p]));
+  return (
+    <div className="bg-blue-50 p-9">
+      <p className="eyebrow mb-4">Sources</p>
+      {result.citations.map((citation) => {
+        const scored = papersByPmid.get(citation.pmid);
+        return (
+          <div key={`${citation.index}-${citation.pmid}`} className="border-t border-blue-200 py-3.5 first:border-t-0">
+            <div className="mb-1.5 flex items-start gap-2">
+              <CitationMarker citation={citation} />
+              <a
+                href={scored?.paper.url ?? `https://pubmed.ncbi.nlm.nih.gov/${citation.pmid}/`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-body text-[13.5px] font-medium text-ink hover:underline"
+              >
+                {scored?.paper.title ?? `PMID ${citation.pmid}`}
+              </a>
+            </div>
+            <p className="font-data text-[10.5px] text-dim">
+              PMID {citation.pmid}
+              {scored ? ` · ${scored.paper.journal}, ${scored.paper.year}` : ""}
+            </p>
+            {scored && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {scored.memoryMultiplier < 1 && <FlagChip label="Read before" tone="neutral" />}
+                {scored.memoryMultiplier > 1 && <FlagChip label="Builds on your thread" tone="blue" />}
+                {citation.supported === false && <FlagChip label="Unsupported" tone="warn" />}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FlagChip({ label, tone }: { label: string; tone: "neutral" | "blue" | "warn" }) {
+  const cls =
+    tone === "blue"
+      ? "border-blue-200 bg-blue-100 text-blue-800"
+      : tone === "warn"
+        ? "border-warn bg-warn-bg text-warn"
+        : "border-rule bg-white text-dim";
+  return <span className={`rounded-[2px] border px-1.5 py-0.5 font-data text-[10px] ${cls}`}>{label}</span>;
+}
+
+function PapersTab({ papers }: { papers: ScoredPaper[] }) {
+  return (
+    <div>
+      {papers.map((sp, index) => (
+        <a
+          key={`${sp.paper.pmid}-${index}`}
+          href={sp.paper.url}
+          target="_blank"
+          rel="noreferrer"
+          className={`grid items-center gap-5 border-t border-rule py-4 first:border-t-0 ${
+            sp.paper.isRare ? "bg-blue-50" : "bg-white"
+          }`}
+          style={{ gridTemplateColumns: "40px minmax(0,1fr) 150px 90px" }}
+        >
+          <span className={`font-data text-xs ${sp.paper.isRare ? "text-blue-800" : "text-dim"}`}>
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <div>
+            <p className="font-body text-sm font-semibold text-ink">{sp.paper.title}</p>
+            <p className="mt-1 font-data text-[10.5px] text-dim">
+              PMID {sp.paper.pmid} · {sp.paper.journal}, {sp.paper.year}
+            </p>
+          </div>
+          <span className={`font-body text-sm ${sp.paper.isRare ? "text-blue-800" : "text-trace-muted"}`}>
+            {sp.paper.condition}
+          </span>
+          <span className={`font-data text-xs ${sp.paper.isRare ? "text-blue-800" : "text-dim"}`}>
+            {sp.score.toFixed(2)}
+          </span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function CostTab({ result }: { result: QueryResult }) {
+  const sites = Object.entries(result.cost.by_call_site).sort((a, b) => b[1].cost_usd - a[1].cost_usd);
+  const maxCost = Math.max(...sites.map(([, c]) => c.cost_usd), 0.000001);
+  return (
+    <div>
+      {sites.map(([site, cost]) => (
+        <div
+          key={site}
+          className="grid items-center gap-5 border-t border-rule py-3.5 first:border-t-0"
+          style={{ gridTemplateColumns: "200px minmax(0,1fr) 150px" }}
+        >
+          <span className="font-data text-xs text-ink">{site}</span>
+          <span className="h-1 overflow-hidden rounded-full bg-blue-200">
+            <span className="block h-full bg-blue-600" style={{ width: `${(cost.cost_usd / maxCost) * 100}%` }} />
+          </span>
+          <span className="text-right font-data text-xs text-dim">
+            {cost.tokens.toLocaleString()} · ${cost.cost_usd.toFixed(5)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatCell({ label, value, sub, emphasize }: { label: string; value: string; sub: string; emphasize?: boolean }) {
+  return (
+    <div className={`p-6 ${emphasize ? "bg-blue-50" : ""}`}>
+      <p className="font-body text-[10.5px] uppercase tracking-[0.08em] text-dim">{label}</p>
+      <p className={`mt-2 font-data text-[28px] ${emphasize ? "text-blue-800" : "text-ink"}`}>{value}</p>
+      <p className="mt-1 font-body text-[11.5px] text-dim">{sub}</p>
+    </div>
   );
 }
 
 export function SourcedSummary({ result }: { result: QueryResult }) {
-  const papersByPmid = new Map(result.papers.map((paper) => [paper.paper.pmid, paper]));
+  const totalClaims = result.citations.length;
+  const unsupportedCount = result.citations.filter((c) => c.supported === false).length;
+  const rareHits = result.papers.filter((p) => p.paper.isRare).length;
 
   return (
-    <div>
-      <div className="mx-auto mb-8 max-w-xl text-center">
-        <p className="eyebrow">Sourced summary</p>
-        <h2 className="mt-3 font-display text-3xl text-ink md:text-4xl">Citation-backed, not diagnostic.</h2>
-        <p className="mt-3 font-body text-sm text-mist">Request {result.request_id}</p>
+    <div className="px-6 py-[110px] md:px-16">
+      <SectionRail number="§03" eyebrow="Sourced summary" className="mb-5" />
+      <h2 className="mb-10 font-display text-[clamp(28px,4vw,44px)] font-medium text-ink">
+        Every sentence carries the paper it came from.
+      </h2>
+
+      <div className="mb-6 grid grid-cols-2 border border-rule bg-white md:grid-cols-4">
+        <div className="border-r border-rule last:border-r-0">
+          <StatCell
+            label="Claims traced"
+            value={`${totalClaims} / ${totalClaims}`}
+            sub={unsupportedCount > 0 ? `${unsupportedCount} flagged unsupported` : "All verified"}
+          />
+        </div>
+        <div className="border-r border-rule last:border-r-0">
+          <StatCell label="Rare-weighted hits" value={String(rareHits)} sub={`Of ${result.papers.length} candidates`} />
+        </div>
+        <div className="border-r border-rule last:border-r-0">
+          <StatCell
+            label="Answer cost"
+            value={`$${result.cost.cost_usd.toFixed(4)}`}
+            sub={`${result.cost.total_tokens.toLocaleString()} tokens`}
+          />
+        </div>
+        <StatCell label="Search rounds" value={String(result.trace.length)} sub="Search-loop iterations" emphasize />
       </div>
 
-      <SectionGlow>
-        <div className="glass-panel p-8">
-          {result.memory.seen_filtered > 0 && (
-            <p className="mb-5 rounded-xl border border-rare/30 bg-rare/10 p-4 font-body text-sm text-rare">
-              {result.memory.seen_filtered}{" "}papers you&apos;ve already read were filtered out.
-            </p>
-          )}
-          {!result.memory.applied && (
-            <p className="mb-5 rounded-xl border border-line bg-void-2/40 p-4 font-body text-sm text-mist">
-              This answer is unpersonalized because personalization was turned off or memory was unavailable.
-            </p>
-          )}
+      <div className="border border-rule bg-white">
+        {result.memory.seen_filtered > 0 && (
+          <p className="border-b border-blue-200 bg-blue-50 px-6 py-3 font-body text-sm text-blue-800">
+            {result.memory.seen_filtered} paper{result.memory.seen_filtered === 1 ? "" : "s"} you&apos;ve already
+            read {result.memory.seen_filtered === 1 ? "was" : "were"} filtered out.
+          </p>
+        )}
+        {!result.memory.applied && (
+          <p className="border-b border-rule bg-white px-6 py-3 font-body text-sm text-dim">
+            This answer is unpersonalized because personalization was turned off or memory was unavailable.
+          </p>
+        )}
 
-          <Tabs defaultValue="summary">
-            <TabsList className="mb-6 flex flex-wrap gap-2 bg-transparent p-0">
-              {[
-                ["summary", "Summary"],
-                ["papers", "Papers"],
-                ["retrieval", "Retrieval process"],
-                ["rarity", "Rarity comparison"],
-              ].map(([value, label]) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="rounded-full border border-line-bright px-4 py-2 font-body text-sm text-mist transition-all data-[state=active]:border-transparent data-[state=active]:bg-[linear-gradient(135deg,var(--accent-purple),var(--accent-pink))] data-[state=active]:text-white"
-                >
-                  {label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+        <Tabs defaultValue="summary">
+          <TabsList className="h-auto w-full justify-start gap-0 rounded-none bg-transparent p-0">
+            {[
+              ["summary", "Summary"],
+              ["papers", "Papers"],
+              ["trace", "Retrieval trace"],
+              ["cost", "This answer's cost"],
+            ].map(([value, label]) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="rounded-none border-0 border-b-2 border-transparent px-[26px] py-4 font-body text-[13px] font-semibold text-dim shadow-none data-[state=active]:border-blue-700 data-[state=active]:bg-transparent data-[state=active]:text-blue-800"
+              >
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-            <TabsContent value="summary">
-              <div className="font-body text-lg leading-relaxed text-paper [text-wrap:pretty]">
-                <SummaryText text={result.summary_markdown} />
+          <TabsContent value="summary" className="mt-0">
+            <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr]">
+              <div className="border-t border-rule px-6 py-9 md:border-t-0 md:border-r md:px-10">
+                <SummaryBody result={result} />
               </div>
-              {result.citations.length > 0 && (
-                <aside className="mt-8 grid gap-3 border-t border-line pt-6">
-                  {result.citations.map((citation) => {
-                    const paper = papersByPmid.get(citation.pmid);
-                    return (
-                      <a
-                        key={`${citation.index}-${citation.pmid}`}
-                        id={`citation-${citation.index}`}
-                        href={paper?.paper.url ?? `https://pubmed.ncbi.nlm.nih.gov/${citation.pmid}/`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-body text-sm text-mist hover:text-ink"
-                      >
-                        <span className="font-bold text-rare">[{citation.index}]</span> {paper?.paper.title ?? `PMID ${citation.pmid}`}
-                        {citation.supported === false && <span className="ml-2 text-accent-pink">Not verified</span>}
-                      </a>
-                    );
-                  })}
-                </aside>
-              )}
-              <CostDetails result={result} />
-            </TabsContent>
+              <SourceList result={result} />
+            </div>
+          </TabsContent>
 
-            <TabsContent value="papers">
-              <div className="grid gap-4">
-                {result.papers.map((paper, index) => (
-                  <a
-                    key={`${paper.paper.pmid}-${index}`}
-                    href={paper.paper.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-2xl border border-line p-5 transition-colors hover:border-line-bright"
-                  >
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className="font-data text-xs text-mist">PMID {paper.paper.pmid}</span>
-                      <MemoryMarker paper={paper} />
-                    </div>
-                    <p className="font-body font-semibold text-ink">{paper.paper.title}</p>
-                    <p className="mt-2 font-body text-sm text-mist">{paper.paper.condition}</p>
-                  </a>
-                ))}
-              </div>
-            </TabsContent>
+          <TabsContent value="papers" className="mt-0 border-t border-rule px-6 md:px-[30px]">
+            <PapersTab papers={result.papers} />
+          </TabsContent>
 
-            <TabsContent value="retrieval">
-              <RetrievalTrace trace={result.trace} />
-            </TabsContent>
+          <TabsContent value="trace" className="mt-0 border-t border-rule px-6 md:px-[30px]">
+            <RetrievalTrace trace={result.trace} />
+          </TabsContent>
 
-            <TabsContent value="rarity">
-              <RarityComparison />
-            </TabsContent>
-          </Tabs>
-        </div>
-      </SectionGlow>
+          <TabsContent value="cost" className="mt-0 border-t border-rule px-6 md:px-[30px]">
+            <CostTab result={result} />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }
