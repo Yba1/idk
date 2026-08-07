@@ -1,112 +1,15 @@
 direction: down
 
-classes: {
-  trigger: {
-    style.fill: "#e1d5e7"
-    style.stroke: "#9673a6"
-    style.font-size: 20
-    style.stroke-width: 2
-  }
-  external: {
-    style.fill: "#d5e8d4"
-    style.stroke: "#82b366"
-    style.font-size: 20
-    style.stroke-width: 2
-  }
-  logic: {
-    style.fill: "#dae8fc"
-    style.stroke: "#6c8ebf"
-    style.font-size: 20
-    style.stroke-width: 2
-  }
-  decision: {
-    shape: diamond
-    style.fill: "#ffe6cc"
-    style.stroke: "#d79b00"
-    style.font-size: 20
-    style.stroke-width: 2
-  }
-  outcome: {
-    style.fill: "#f8cecc"
-    style.stroke: "#b85450"
-    style.font-size: 20
-    style.stroke-width: 2
-  }
-}
+request: "1. Validate query"
+profile: "2. Load memory profile"
+hyde: "3. HyDE expansion [LLM]"
+retrieve: "4. Retrieve papers"
+rerank: "5. Memory re-rank"
+relevance: "6. Relevance check [LLM]"
+refine: "7. Refine query [LLM]"
+summary: "8. Write summary [LLM]"
+citations: "9. Citation check [LLM]"
+distill: "10. Memory distill [LLM]"
+response: "11. Return answer + cost"
 
-frontend: Frontend\nsubmits query {
-  class: trigger
-}
-
-api_receive: API\nPOST /query or /query/stream {
-  class: logic
-}
-
-search_loop: Search Loop\nHyDE expand, hybrid retrieval,\nrelevance check (up to 2 iterations) {
-  class: logic
-}
-
-papers_check: Any relevant\npapers found? {
-  class: decision
-}
-
-no_match_path: Out-of-scope path\nget_closest_conditions()\nreturn suggested_conditions {
-  class: outcome
-}
-
-sparse_check: corpus_paper_count\n< 10 for condition? {
-  class: decision
-}
-
-summary_gen: Summary Generation\ncompress abstracts, synthesize\ncited summary via Groq {
-  class: logic
-}
-
-sparse_note: Set sparse_coverage=True\n(overrides low_confidence note) {
-  class: outcome
-}
-
-verification: Background Verification\n(runs after summary returned) {
-  class: logic
-}
-
-citation_check: "Citation Check\nper N-marked claim, judge support" {
-  class: logic
-}
-
-differential_check: Differential Check\nonly if candidate survives\nself-match filtering {
-  class: logic
-}
-
-groq: Groq\n(via Paritok proxy) {
-  class: external
-}
-
-response: Response streamed to Frontend\ntimeline -> summary, citations,\npapers, brain atlas {
-  class: trigger
-}
-
-frontend -> api_receive
-api_receive -> search_loop
-search_loop -> papers_check
-
-papers_check -> no_match_path: "no (after 2 iterations)"
-no_match_path -> response: "no_match=True"
-
-papers_check -> sparse_check: "yes (2+ papers)"
-sparse_check -> sparse_note: "yes"
-sparse_check -> summary_gen: "no"
-sparse_note -> summary_gen
-
-summary_gen -> groq: "compressed abstracts"
-groq -> summary_gen: "sourced summary"
-summary_gen -> verification: "not degraded: spawn threads"
-summary_gen -> response: "degraded=True: skip verification"
-
-verification -> citation_check
-verification -> differential_check
-citation_check -> groq
-differential_check -> groq
-
-citation_check -> response
-differential_check -> response
+request -> profile -> hyde -> retrieve -> rerank -> relevance -> refine -> summary -> citations -> distill -> response

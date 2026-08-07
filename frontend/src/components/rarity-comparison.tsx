@@ -74,7 +74,6 @@ export function RarityComparison() {
 
   useEffect(() => {
     let isMounted = true;
-    setError(false);
     getDemoContrast()
       .then((result) => {
         if (isMounted) setData(result);
@@ -95,7 +94,10 @@ export function RarityComparison() {
         </p>
         <button
           type="button"
-          onClick={() => setAttempt((n) => n + 1)}
+          onClick={() => {
+            setError(false);
+            setAttempt((n) => n + 1);
+          }}
           className="font-body text-sm underline text-mist hover:text-white"
         >
           Retry

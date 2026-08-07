@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Newsreader, Space_Grotesk, Sora, Martian_Mono } from "next/font/google";
 import { NeuroBackground } from "@/components/neuro-background";
+import { HealthFooter } from "@/components/health-footer";
 import "./globals.css";
 
 const displayFont = Newsreader({
@@ -52,6 +53,7 @@ export default function RootLayout({
         <div className="ambient-grain" aria-hidden="true" />
         <NeuroBackground />
         {children}
+        <HealthFooter />
       </body>
     </html>
   );

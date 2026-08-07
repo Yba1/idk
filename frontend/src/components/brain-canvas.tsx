@@ -178,10 +178,12 @@ export function BrainCanvas({ anchors, activeAnchorId, onHover, onSelect }: Prop
   const onSelectRef = useRef(onSelect);
   const anchorMetaRef = useRef(new Map(anchors.map((a) => [a.id, a])));
 
-  activeIdRef.current = activeAnchorId;
-  onHoverRef.current = onHover;
-  onSelectRef.current = onSelect;
-  anchorMetaRef.current = new Map(anchors.map((a) => [a.id, a]));
+  useEffect(() => {
+    activeIdRef.current = activeAnchorId;
+    onHoverRef.current = onHover;
+    onSelectRef.current = onSelect;
+    anchorMetaRef.current = new Map(anchors.map((anchor) => [anchor.id, anchor]));
+  }, [activeAnchorId, anchors, onHover, onSelect]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -493,7 +495,6 @@ export function BrainCanvas({ anchors, activeAnchorId, onHover, onSelect }: Prop
     // Point cloud/links/connectome are generated once per mount; hover/select/active
     // state flows through refs read inside the draw loop so this doesn't rebuild
     // the geometry on every prop change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return <canvas ref={canvasRef} className="h-full w-full cursor-grab touch-none" />;

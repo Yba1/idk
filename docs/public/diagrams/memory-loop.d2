@@ -1,0 +1,12 @@
+direction: right
+
+query: "Query"
+retrieve: "Retrieve papers"
+rerank: "Bounded memory re-rank\n[0.6, 1.2]"
+summary: "Sourced summary"
+record: "Record query + PMIDs"
+profile: "Distill researcher profile"
+next: "Next query is less repetitive"
+
+query -> retrieve -> rerank -> summary -> record -> profile -> next
+next -> query: "continuity"

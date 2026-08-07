@@ -1,164 +1,73 @@
-// frontend/src/lib/api.ts
+import type { components } from "@/lib/api-types";
+
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+export const DEMO_USER_ID = "demo-user";
+export const DEMO_SESSION_ID = "demo-session";
 
-export type TraceEntry = {
-  iteration: number;
-  retrieved_pmids: string[];
-  relevant: boolean;
-  confidence: number;
-  note: string;
-};
+export type QueryResult = components["schemas"]["QueryResponse"];
+export type TraceEntry = components["schemas"]["TraceRoundOut"];
+export type ScoredPaper = components["schemas"]["ScoredPaperOut"];
+export type Condition = components["schemas"]["ConditionOut"];
+export type ContrastPaper = components["schemas"]["ContrastPaperOut"];
+export type DemoContrast = components["schemas"]["DemoContrastResponse"];
+export type MemoryProfile = components["schemas"]["ProfileOut"];
+export type EconomicsSummary = components["schemas"]["EconomicsSummaryOut"];
+export type EconomicsAnswer = components["schemas"]["EconomicsAskOut"];
+export type EconomicsRequest = components["schemas"]["EconomicsRequestOut"];
 
-export type Citation = {
-  marker: string;
-  pmid: string;
-  title: string;
-  condition: string;
-};
-
-export type SuggestedCondition = {
-  name: string;
-  paper_count: number;
-};
-
-export type CaseContext = {
-  condition_name: string;
-  rarity: string;
-  region_literature: string;
-  atlas_label: string;
-  corpus_paper_count: number;
-  imaging_findings: string | null;
-  teaching_point: string | null;
-};
-
-export type DifferentialItem = {
-  condition_name: string;
-  marker: string;
-  pmid: string;
-};
-
-export type FlaggedClaim = {
-  sentence: string;
-  marker: string | null;
+export type PortHealth = { ok: boolean; detail: string };
+export type Health = {
   status: string;
-  reason: string;
+  ports: Record<"retrieval" | "llm" | "memory" | "ledger", PortHealth>;
 };
 
-export type QueryResult = {
-  summary_text: string;
-  citations: Citation[];
-  trace: TraceEntry[];
-  low_confidence: boolean;
-  degraded: boolean;
-  no_match: boolean;
-  too_generic: boolean;
-  example_query: string | null;
-  suggested_conditions: SuggestedCondition[];
-  flagged_claims: FlaggedClaim[];
-  case_context: CaseContext | null;
-  differential: DifferentialItem[];
-};
-
-export type ContrastPaper = {
-  pmid: string;
-  title: string;
-  condition: string;
-  rarity: "rare" | "common";
-};
-
-export type DemoContrast = {
-  query: string;
-  naive: ContrastPaper[];
-  weighted: ContrastPaper[];
-  rare_case_pmid: string;
-};
-
-export type Condition = {
-  name: string;
-  rarity: "rare" | "common";
-  region_literature: string;
-  atlas_label: string;
-  overlaps_with: string[];
-};
-
-function timeoutSignal(timeoutMs: number): AbortSignal {
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), timeoutMs);
-  return controller.signal;
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 10000): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...init?.headers },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) throw new Error(`Request to ${path} failed with status ${response.status}`);
+  return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
 }
 
-async function postJson<T>(path: string, body: unknown, timeoutMs = 45000): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: timeoutSignal(timeoutMs),
-    });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error(`Request to ${path} timed out after ${timeoutMs}ms`);
-    }
-    throw err;
-  }
-  if (!response.ok) {
-    throw new Error(`Request to ${path} failed with status ${response.status}`);
-  }
-  return response.json() as Promise<T>;
+function post<T>(path: string, body: unknown, timeoutMs?: number): Promise<T> {
+  return request<T>(path, { method: "POST", body: JSON.stringify(body) }, timeoutMs);
 }
 
-async function getJson<T>(path: string, timeoutMs = 10000, retries = 0): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, { signal: timeoutSignal(timeoutMs) });
-  } catch (err) {
-    if (retries > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      return getJson<T>(path, timeoutMs, retries - 1);
-    }
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error(`Request to ${path} timed out after ${timeoutMs}ms`);
-    }
-    throw err;
-  }
-  if (!response.ok) {
-    throw new Error(`Request to ${path} failed with status ${response.status}`);
-  }
-  return response.json() as Promise<T>;
-}
-
-export function queryLiterature(query: string): Promise<QueryResult> {
-  return postJson<QueryResult>("/query", { query }, 170000);
+export function queryLiterature(query: string, personalize = true): Promise<QueryResult> {
+  return post<QueryResult>(
+    "/query",
+    { query, session_id: DEMO_SESSION_ID, user_id: DEMO_USER_ID, personalize },
+    170000,
+  );
 }
 
 export function queryLiteratureStream(
   query: string,
+  personalize: boolean,
   onStage: (stage: string, detail: { iteration?: number }) => void,
 ): Promise<QueryResult> {
   return new Promise((resolve, reject) => {
-    (async () => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 170000);
+    void (async () => {
       let response: Response;
       try {
         response = await fetch(`${API_BASE_URL}/query/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query }),
-          signal: controller.signal,
+          body: JSON.stringify({
+            query,
+            session_id: DEMO_SESSION_ID,
+            user_id: DEMO_USER_ID,
+            personalize,
+          }),
+          signal: AbortSignal.timeout(170000),
         });
-      } catch (err) {
-        clearTimeout(timeoutId);
-        if (err instanceof DOMException && err.name === "AbortError") {
-          reject(new Error("Request to /query/stream timed out after 170000ms"));
-          return;
-        }
-        reject(err);
+      } catch (error) {
+        reject(error);
         return;
       }
       if (!response.ok || !response.body) {
-        clearTimeout(timeoutId);
         reject(new Error(`Request to /query/stream failed with status ${response.status}`));
         return;
       }
@@ -166,54 +75,88 @@ export function queryLiteratureStream(
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-
-          let separatorIndex: number;
-          while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
-            const frame = buffer.slice(0, separatorIndex);
+          let separatorIndex = buffer.indexOf("\n\n");
+          while (separatorIndex !== -1) {
+            const line = buffer.slice(0, separatorIndex).trim();
             buffer = buffer.slice(separatorIndex + 2);
-            const line = frame.trim();
-            if (!line.startsWith("data:")) continue;
-            const payload = JSON.parse(line.slice(5).trim());
-
-            if (payload.type === "stage") {
-              onStage(payload.stage, { iteration: payload.iteration });
-            } else if (payload.type === "done") {
-              clearTimeout(timeoutId);
-              resolve(payload.result as QueryResult);
-              return;
-            } else if (payload.type === "error") {
-              clearTimeout(timeoutId);
-              reject(new Error(payload.message));
-              return;
+            if (line.startsWith("data:")) {
+              const payload = JSON.parse(line.slice(5).trim());
+              if (payload.type === "stage") onStage(payload.stage, { iteration: payload.iteration });
+              if (payload.type === "done") {
+                resolve(payload.result as QueryResult);
+                return;
+              }
+              if (payload.type === "error") {
+                reject(new Error(payload.message));
+                return;
+              }
             }
+            separatorIndex = buffer.indexOf("\n\n");
           }
         }
-        clearTimeout(timeoutId);
-        reject(new Error("Stream ended without a done or error event"));
-      } catch (err) {
-        clearTimeout(timeoutId);
-        if (err instanceof DOMException && err.name === "AbortError") {
-          reject(new Error("Request to /query/stream timed out after 170000ms"));
-          return;
-        }
-        reject(err);
+        reject(new Error("Stream ended without a result"));
+      } catch (error) {
+        reject(error);
       }
     })();
   });
 }
 
+export function getMemoryProfile(): Promise<MemoryProfile> {
+  return request<MemoryProfile>(`/memory/profile?user_id=${DEMO_USER_ID}`);
+}
+
+export function setMemorySpecialty(specialty: string): Promise<void> {
+  return post<void>("/memory/specialty", { user_id: DEMO_USER_ID, specialty });
+}
+
+export function forgetMemory(): Promise<void> {
+  return post<void>("/memory/forget", { user_id: DEMO_USER_ID });
+}
+
+export function getEconomicsSummary(window = "24h"): Promise<EconomicsSummary> {
+  return request<EconomicsSummary>(`/economics/summary?window=${encodeURIComponent(window)}`);
+}
+
+export function getEconomicsRequest(requestId: string): Promise<EconomicsRequest> {
+  return request<EconomicsRequest>(`/economics/request/${encodeURIComponent(requestId)}`);
+}
+
+export function askEconomics(question: string): Promise<EconomicsAnswer> {
+  return post<EconomicsAnswer>("/economics/ask", { question }, 30000);
+}
+
+export async function getHealth(): Promise<Health> {
+  const raw = (await request<Record<string, unknown>>("/health")) as {
+    status?: unknown;
+    ports?: Record<string, { ok?: unknown; detail?: unknown }>;
+  };
+  const names = ["retrieval", "llm", "memory", "ledger"] as const;
+  return {
+    status: typeof raw.status === "string" ? raw.status : "unknown",
+    ports: Object.fromEntries(
+      names.map((name) => [
+        name,
+        {
+          ok: raw.ports?.[name]?.ok === true,
+          detail: typeof raw.ports?.[name]?.detail === "string" ? raw.ports[name].detail : "No status",
+        },
+      ]),
+    ) as Health["ports"],
+  };
+}
+
 export function getDemoContrast(): Promise<DemoContrast> {
-  return getJson<DemoContrast>("/demo-contrast", 10000, 2);
+  return request<DemoContrast>("/demo-contrast", undefined, 15000);
 }
 
 export function getConditions(): Promise<Condition[]> {
-  return getJson<Condition[]>("/conditions");
+  return request<Condition[]>("/conditions");
 }
 
 export function getAtlasUrl(conditionName: string): string {

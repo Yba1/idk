@@ -27,6 +27,12 @@ export function RetrievalTrace({ trace }: { trace: TraceEntry[] }) {
           <div className="flex flex-col gap-1">
             <span className="font-body text-xs text-mist">Iteration <span className="font-bold">{entry.iteration}</span></span>
             <span className="font-body text-xs text-mist">confidence <span className="font-bold">{entry.confidence.toFixed(2)}</span></span>
+            <span className="font-body text-xs text-mist">
+              memory <span className="font-bold">{entry.memory_applied ? "applied" : "not applied"}</span>
+            </span>
+            {entry.seen_filtered > 0 && (
+              <span className="font-body text-xs text-rare">{entry.seen_filtered} seen filtered</span>
+            )}
           </div>
         </div>
       ))}

@@ -1,0 +1,6 @@
+.next/
+.openapi.json
+playwright-report/
+test-results/
+debug.log
+*.tsbuildinfo

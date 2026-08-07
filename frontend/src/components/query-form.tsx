@@ -14,6 +14,7 @@ type Props = {
 
 export function QueryForm({ onResult, onCurrentQueryChange }: Props) {
   const [query, setQuery] = useState("");
+  const [personalize, setPersonalize] = useState(true);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [stages, setStages] = useState<ProgressStageEvent[]>([]);
 
@@ -29,7 +30,7 @@ export function QueryForm({ onResult, onCurrentQueryChange }: Props) {
     setStages([]);
     setStatus("loading");
     try {
-      const result = await queryLiteratureStream(queryText.trim(), (stage, detail) => {
+      const result = await queryLiteratureStream(queryText.trim(), personalize, (stage, detail) => {
         setStages((prev) => [...prev, { stage, iteration: detail.iteration }]);
       });
       onResult(result);
@@ -59,7 +60,17 @@ export function QueryForm({ onResult, onCurrentQueryChange }: Props) {
         <p className="font-body text-sm text-mist">
           Tip: mention a scan type (like FDG-PET), a symptom, or a brain region for the best match.
         </p>
-        <div className="flex justify-end">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex cursor-pointer items-center gap-3 font-body text-sm text-paper">
+            <input
+              type="checkbox"
+              checked={personalize}
+              onChange={(event) => setPersonalize(event.target.checked)}
+              disabled={status === "loading"}
+              className="h-5 w-5 accent-[var(--accent-pink)]"
+            />
+            Personalize with EverMind
+          </label>
           <button
             type="submit"
             disabled={status === "loading" || !query.trim()}

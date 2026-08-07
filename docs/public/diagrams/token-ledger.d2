@@ -1,0 +1,25 @@
+direction: right
+
+query: "One query"
+calls: {
+  hyde: "hyde"
+  relevance: "relevance_check"
+  refine: "refine"
+  summary: "summary"
+  citation: "citation_check"
+  memory: "memory_distill"
+}
+ledger: "Up to six TOKEN_LEDGER rows"
+views: "Aggregate views"
+dashboard: "Token economy dashboard"
+analyst: "Cortex Analyst"
+
+query -> calls.hyde
+query -> calls.relevance
+query -> calls.refine
+query -> calls.summary
+query -> calls.citation
+query -> calls.memory
+calls -> ledger -> views
+views -> dashboard
+views -> analyst
