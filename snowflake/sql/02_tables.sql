@@ -50,15 +50,38 @@ CREATE OR REPLACE TABLE NEULIT.CORE.MODEL_PRICING (
   EFFECTIVE_FROM     TIMESTAMP_NTZ NOT NULL
 );
 
--- Seed MODEL_PRICING for the default model. NOTE: these credit rates are
--- placeholders copied from the Snowflake Cortex published rate card at
--- authoring time and MUST be reconciled against the account's actual
--- consumption table (SNOWFLAKE.ACCOUNT_USAGE / the Cortex pricing page) by
--- whoever runs this against a real account. See Handoff-Log.md.
+-- Seed MODEL_PRICING for the default model + its likely current equivalent.
+--
+-- Researched 2026-08-07 (WebSearch, no live Snowflake account available in
+-- this sandbox to cross-check against SNOWFLAKE.ACCOUNT_USAGE). Snowflake's
+-- Cortex AI pricing moved to a token-based "AI Credit" model effective
+-- 2026-04-01, billed against a per-model Service Consumption Table at a
+-- flat $2.00/credit list rate ($2.20 for regional/cross-region processing).
+-- Published rate found for `claude-sonnet-4-5` via AI_COMPLETE:
+--   1.8 credits / 1M input tokens, 9.0 credits / 1M output tokens
+--   (~$3.60 per 1M input tokens, ~$18.00 per 1M output tokens at $2/credit).
+-- Sources:
+--   https://www.finout.io/blog/snowflake-cortex-pricing
+--   https://www.finout.io/tools/snowflake-cortex-cost-calculator
+--   https://www.snowflake.com/en/developers/guides/cortex-rest-api-billing-cost/
+--
+-- `claude-3-5-sonnet` (this app's SNOWFLAKE_CORTEX_MODEL default, see
+-- backend/snowflake/llm.py) did not have a discoverable, distinctly-cited
+-- current rate in this pass -- `claude-sonnet-4-5` appears to be the
+-- generally-available successor Snowflake now publishes rates for, and is
+-- the most defensible real-numbers proxy available without account access.
+-- Both rows are seeded below so the app keeps working against either model
+-- name. THIS STILL MUST BE RECONCILED against the account's actual
+-- SNOWFLAKE.ACCOUNT_USAGE / Service Consumption Table once live -- list
+-- prices can differ from an account's actual billed rate, and Cortex model
+-- availability is region-specific (see Decisions.md and Handoff-Log.md).
 MERGE INTO NEULIT.CORE.MODEL_PRICING AS tgt
-USING (SELECT 'claude-3-5-sonnet' AS MODEL, 3.0 AS CREDITS_PER_MTOK_IN,
-              15.0 AS CREDITS_PER_MTOK_OUT, 2.0 AS USD_PER_CREDIT,
-              CURRENT_TIMESTAMP() AS EFFECTIVE_FROM) AS src
+USING (
+  SELECT * FROM VALUES
+    ('claude-3-5-sonnet', 1.8, 9.0, 2.0, CURRENT_TIMESTAMP()),
+    ('claude-sonnet-4-5', 1.8, 9.0, 2.0, CURRENT_TIMESTAMP())
+  AS t(MODEL, CREDITS_PER_MTOK_IN, CREDITS_PER_MTOK_OUT, USD_PER_CREDIT, EFFECTIVE_FROM)
+) AS src
 ON tgt.MODEL = src.MODEL
 WHEN NOT MATCHED THEN INSERT (MODEL, CREDITS_PER_MTOK_IN, CREDITS_PER_MTOK_OUT, USD_PER_CREDIT, EFFECTIVE_FROM)
 VALUES (src.MODEL, src.CREDITS_PER_MTOK_IN, src.CREDITS_PER_MTOK_OUT, src.USD_PER_CREDIT, src.EFFECTIVE_FROM);

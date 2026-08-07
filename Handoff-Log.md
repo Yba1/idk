@@ -107,13 +107,21 @@ In order:
    `PAPERS_SEARCH` reports `ACTIVE`, then run
    `CortexSearchRetriever().search("asymmetric parietal hypometabolism on FDG-PET with progressive apraxia")`
    (the phase card's CP1 gold-set query) and paste a sample result here.
-4. **Reconcile `MODEL_PRICING`.** `02_tables.sql` seeds a *placeholder*
-   credit rate for `claude-3-5-sonnet` (3.0 credits/Mtok in, 15.0 out, $2/credit)
-   copied from a generic published rate card at authoring time, not the
-   account's actual Cortex consumption pricing. Check
+4. **Reconcile `MODEL_PRICING`.** `02_tables.sql` now seeds researched
+   published rates (1.8 credits/Mtok in, 9.0 credits/Mtok out, $2/credit)
+   for both `claude-3-5-sonnet` and `claude-sonnet-4-5`, sourced from public
+   write-ups of Snowflake's post-2026-04-01 AI Credit Service Consumption
+   Table (cited in the SQL comment) — **this is still a list-price research
+   finding, not a verified account rate.** No live Snowflake account was
+   available in this sandbox to check `SNOWFLAKE.ACCOUNT_USAGE` or the
+   account's actual Cortex rate card, and `claude-3-5-sonnet` specifically
+   did not have a distinctly-cited current rate in the search results used —
+   `claude-sonnet-4-5`'s published rate was applied to both rows as the best
+   available real-numbers proxy. A human with credentials MUST check
    `SNOWFLAKE.ACCOUNT_USAGE` / the account's real Cortex rate card and
-   `UPDATE NEULIT.CORE.MODEL_PRICING` before trusting any cost number this
-   system reports.
+   `UPDATE NEULIT.CORE.MODEL_PRICING` (or confirm the seeded values already
+   match) before trusting any cost number this system reports — published
+   list-price credit rates can differ from an account's actual billed rate.
 5. **Confirm `claude-3-5-sonnet` is available on `COMPLETE`** in the
    account's region. If not, pick the best available model, set
    `SNOWFLAKE_CORTEX_MODEL` to it, and record the substitution in a
