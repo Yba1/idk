@@ -139,6 +139,159 @@ _CANNED_CONTENT: dict[CallSite, str] = {
     "memory_distill": json.dumps({"distilled_context": "fake distilled researcher context"}),
 }
 
+# --- Extractive stand-in for the `summary` call site ------------------------
+#
+# The canned "**Fake summary.**" above is fine for assertions but useless for
+# looking at: §03 renders a literal placeholder and "Claims traced 0 / 0",
+# which says nothing true about the product.
+#
+# This builds a summary the honest way instead of inventing prose: it parses
+# the numbered abstracts out of the prompt the pipeline actually sent, picks
+# the sentence from each that best overlaps the query, and emits it carrying
+# that paper's real [N] marker. So every sentence on screen is a verbatim
+# sentence from a real PubMed abstract that was really retrieved for that
+# query, and every citation resolves to that paper's real PMID.
+#
+# It is a deterministic local extractor, NOT a language model, and it is not
+# pretending to be one -- with Snowflake credentials configured this call site
+# goes to Cortex COMPLETE and this code never runs. Say exactly that if anyone
+# asks what generated it.
+
+def _role_of(message) -> str:
+    """Call sites build plain dicts in some paths and Message dataclasses in
+    others (CortexLLMClient.chat accepts either); mirror that tolerance."""
+    return message.get("role", "") if isinstance(message, dict) else getattr(message, "role", "")
+
+
+def _content_of(message) -> str:
+    return message.get("content", "") if isinstance(message, dict) else getattr(message, "content", "")
+
+
+_PROMPT_PAPER_RE = re.compile(
+    r"\[(\d+)\]\s+PMID\s+(\S+)\s+-\s+(.+?)\n(.*?)(?=\n\n\[\d+\]\s+PMID|\Z)",
+    re.DOTALL,
+)
+# Split on sentence-final punctuation followed by whitespace, without
+# requiring the next character to be [A-Z0-9]: PubMed abstracts routinely open
+# sentences with a superscript tracer name ("¹⁸F-FDG PET showed..."), and the
+# stricter lookahead silently glued four sentences into one.
+_SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[^\s a-z])")
+_MAX_SUMMARY_CLAIMS = 4
+# Keep each claim to one readable line on screen. Sentences longer than this
+# are skipped in favour of the next-best candidate rather than truncated --
+# a half-sentence carrying a [N] marker would be a claim nobody actually made.
+_MAX_CLAIM_CHARS = 240
+
+
+def _extractive_summary(messages: list[Message]) -> str | None:
+    """Return a `summary` JSON payload built from the prompt's own abstracts,
+    or None if the prompt isn't in the expected shape (caller falls back to
+    the canned payload rather than guessing).
+    """
+    user = next((m for m in reversed(messages) if _role_of(m) == "user"), None)
+    if user is None:
+        return None
+    content = _content_of(user)
+
+    query = ""
+    if content.startswith("Query:"):
+        query = content.split("\n", 1)[0][len("Query:"):].strip()
+    query_tokens = _tokenize(query)
+
+    papers = _PROMPT_PAPER_RE.findall(content)
+    if not papers:
+        return None
+
+    sentences: list[str] = []
+    seen_pmids: set[str] = set()
+    seen_sentences: set[str] = set()
+    for index, pmid, title, abstract in papers:
+        if len(sentences) >= _MAX_SUMMARY_CLAIMS:
+            break
+        # The corpus contains near-duplicate records (the same PMID retrieved
+        # twice), which would otherwise render as the same sentence cited to
+        # two different [N] markers -- the exact thing a citation-verification
+        # product must not do.
+        if pmid in seen_pmids:
+            continue
+        candidates = [s.strip() for s in _SENT_SPLIT_RE.split(abstract.strip()) if s.strip()]
+        short = [s for s in candidates if len(s) <= _MAX_CLAIM_CHARS]
+        candidates = [s for s in (short or candidates) if s not in seen_sentences]
+        if not candidates:
+            candidates = [title.strip()]
+        best = max(candidates, key=lambda s: len(query_tokens & _tokenize(s)))
+        seen_pmids.add(pmid)
+        seen_sentences.add(best)
+        best = best.rstrip().rstrip(".!?")
+        # Marker sits INSIDE the sentence, before the terminal period. The
+        # frontend splits on /(?<=[.!?])\s+(?=[A-Z0-9])/, so a marker placed
+        # after the period ("text. [N] Next...") blocks the split and collapses
+        # every claim into one mis-attributed block.
+        sentences.append(f"{best} [{index}].")
+
+    if not sentences:
+        return None
+
+    markdown = " ".join(sentences)
+    return json.dumps({"summary_markdown": markdown})
+
+
+_CLAIMS_BLOCK_RE = re.compile(r"Claims to verify:\s*(\[.*?\])\s*\n\nFor each", re.DOTALL)
+_SUMMARY_BLOCK_RE = re.compile(r"\nSummary:\n(.*?)\n\nClaims to verify:", re.DOTALL)
+# A claim is "supported" when most of its content words actually occur in the
+# abstract it cites. Stand-in for the judge model's semantic check -- crude,
+# but it is a real comparison of the claim against its source, not a rubber
+# stamp, so an [N] pointing at the wrong paper is still caught.
+_SUPPORT_THRESHOLD = 0.6
+
+
+def _per_claim_citation_verdicts(messages: list[Message]) -> str | None:
+    """Return a `citation_check` JSON payload with one verdict per claim, or
+    None if the prompt isn't in the expected shape."""
+    user = next((m for m in reversed(messages) if _role_of(m) == "user"), None)
+    if user is None:
+        return None
+    content = _content_of(user)
+
+    claims_match = _CLAIMS_BLOCK_RE.search(content)
+    summary_match = _SUMMARY_BLOCK_RE.search(content)
+    if not claims_match or not summary_match:
+        return None
+    try:
+        claims = json.loads(claims_match.group(1))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(claims, list) or not claims:
+        return None
+
+    summary = summary_match.group(1)
+    results = []
+    for claim in claims:
+        if not isinstance(claim, dict) or "index" not in claim:
+            continue
+        index = claim["index"]
+        sentence = next(
+            (s for s in _SENT_SPLIT_RE.split(summary) if f"[{index}]" in s),
+            "",
+        )
+        claim_tokens = _tokenize(re.sub(r"\[\d+\]", " ", sentence))
+        abstract_tokens = _tokenize(str(claim.get("abstract", "")))
+        if not claim_tokens:
+            continue
+        overlap = len(claim_tokens & abstract_tokens) / len(claim_tokens)
+        supported = overlap >= _SUPPORT_THRESHOLD
+        results.append({
+            "index": index,
+            "supported": supported,
+            "note": (
+                "Sentence occurs in the cited abstract."
+                if supported
+                else "Claim wording not found in the cited abstract."
+            ),
+        })
+
+    return json.dumps({"results": results}) if results else None
+
 
 class FakeLLM:
     """Canned per-call_site JSON payloads. Records to the active ledger."""
@@ -155,7 +308,18 @@ class FakeLLM:
         max_output_tokens: int = 1024,
     ) -> ChatResult:
         content = _CANNED_CONTENT.get(call_site, json.dumps({}))
-        prompt_tokens = sum(len(m.content.split()) for m in messages)
+
+        # For the two call sites whose output is rendered to a human, derive a
+        # real payload from the prompt instead of returning the placeholder.
+        # Both fall back to the canned string if the prompt isn't in the shape
+        # they expect, so no assertion that depends on the canned value breaks
+        # unless the pipeline genuinely sent real papers.
+        if call_site == "summary":
+            content = _extractive_summary(messages) or content
+        elif call_site == "citation_check":
+            content = _per_claim_citation_verdicts(messages) or content
+
+        prompt_tokens = sum(len(_content_of(m).split()) for m in messages)
         completion_tokens = len(content.split())
         usage = TokenUsage(
             prompt_tokens=prompt_tokens,

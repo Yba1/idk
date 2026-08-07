@@ -11,6 +11,33 @@ type Sentence = {
   markerIndex: number | null;
 };
 
+/** Remove "[N]" markers for display, then tidy what their removal leaves behind.
+ *
+ * Markers sit inside the sentence before its terminal punctuation ("…on EEG
+ * [1]."), because the sentence splitter needs the period to be sentence-final.
+ * Deleting the marker naively leaves "…on EEG ." — an orphaned space before
+ * the period on every claim. */
+function stripMarkers(text: string): string {
+  return text
+    .replace(MARKER_RE, "")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** " · Journal, Year" — but only for the parts that actually exist.
+ *
+ * Every record in the current corpus has `journal: null, year: null` (the
+ * PubMed ingestion never populated them), and rendering them unconditionally
+ * produced a literal "PMID 34703513 · , 0" under every citation. Showing an
+ * empty field as punctuation-and-a-zero is worse than showing nothing. */
+function citationMeta(scored: ScoredPaper | undefined): string {
+  const parts = [scored?.paper.journal, scored?.paper.year].filter(
+    (v) => v !== null && v !== undefined && v !== "" && v !== 0,
+  );
+  return parts.length ? ` · ${parts.join(", ")}` : "";
+}
+
 function splitIntoSentences(markdown: string): Sentence[] {
   if (!markdown.trim()) return [];
   return markdown
@@ -68,7 +95,7 @@ function SummaryBody({ result }: { result: QueryResult }) {
             </span>
             <div>
               <p className="font-body text-lg leading-[1.72] text-ink" style={{ textWrap: "pretty" }}>
-                {sentence.text.replace(MARKER_RE, "").trim()}
+                {stripMarkers(sentence.text)}
               </p>
               {unsupported && citation?.note && (
                 <p className="mt-1.5 font-body text-[12.5px] text-warn">{citation.note}</p>
@@ -119,7 +146,7 @@ function SourceList({ result }: { result: QueryResult }) {
             </div>
             <p className="font-data text-[10.5px] text-dim">
               PMID {citation.pmid}
-              {scored ? ` · ${scored.paper.journal}, ${scored.paper.year}` : ""}
+              {citationMeta(scored)}
             </p>
             {scored && (
               <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -165,7 +192,8 @@ function PapersTab({ papers }: { papers: ScoredPaper[] }) {
           <div>
             <p className="font-body text-sm font-semibold text-ink">{sp.paper.title}</p>
             <p className="mt-1 font-data text-[10.5px] text-dim">
-              PMID {sp.paper.pmid} · {sp.paper.journal}, {sp.paper.year}
+              PMID {sp.paper.pmid}
+              {citationMeta(sp)}
             </p>
           </div>
           <span className={`font-body text-sm ${sp.paper.isRare ? "text-blue-800" : "text-trace-muted"}`}>

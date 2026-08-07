@@ -82,7 +82,7 @@ async function runQuery(policyLabel) {
 // ── 0:00 ─ Hero. The thesis. ────────────────────────────────────────────
 beat("hero");
 await page.goto("http://localhost:3000", { waitUntil: "networkidle" });
-await wait(5200);
+await wait(4000);
 
 // ── 0:05 ─ The corpus: rare conditions first. ───────────────────────────
 beat("corpus / rarity ladder");
@@ -112,7 +112,7 @@ await wait(1500);
 
 beat("TIGHT panel");
 await smoothTo('[data-testid="policy-panel"]');
-await wait(9500);
+await wait(8000);
 
 // ── 0:33 ─ Generous: same budget, three times the papers. ───────────────
 beat("run GENEROUS");
@@ -120,31 +120,36 @@ await runQuery("Generous");
 await wait(1200);
 beat("GENEROUS panel");
 await smoothTo('[data-testid="policy-panel"]');
-await wait(13500);
+await wait(12000);
 
-// ── 0:49 ─ The papers it actually found. ────────────────────────────────
+// ── 0:49 ─ The sourced summary. Every sentence carries its paper. ───────
+beat("sourced summary + sources");
+await page.evaluate(() => {
+  const h = [...document.querySelectorAll("h2")].find((e) =>
+    /Every sentence carries/i.test(e.textContent || ""),
+  );
+  if (h) h.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+await wait(8000);
+
+// ── 0:58 ─ The papers behind it. ────────────────────────────────────────
 beat("papers tab");
 await page.getByRole("tab", { name: "Papers", exact: true }).click();
-await smoothTo('[role="tabpanel"]');
-await wait(2000);
-await page.evaluate(() => window.scrollBy({ top: 420, behavior: "smooth" }));
-await wait(5500);
+await wait(400);
+await page.evaluate(() => window.scrollBy({ top: 300, behavior: "smooth" }));
+await wait(4200);
 
-// ── 0:57 ─ What it cost, per pipeline step. ─────────────────────────────
+// ── 1:03 ─ What it cost, per pipeline step. ─────────────────────────────
 beat("cost tab");
 await page.getByRole("tab", { name: "This answer's cost", exact: true }).click();
 await wait(600);
-// Centre the per-call-site bars. Deliberately does NOT scroll up into the
-// stat row: on the fake profile FakeLLM returns a canned summary with no
-// citations, so "Claims traced 0 / 0" sits there and says nothing true about
-// the product. That tile is real once Snowflake credentials are in place.
 await page.evaluate(() => {
   const el = [...document.querySelectorAll("*")].find((e) =>
     /^relevance_check$/.test((e.textContent || "").trim()),
   );
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
 });
-await wait(7000);
+await wait(4800);
 
 // ── 1:05 ─ Memory. ──────────────────────────────────────────────────────
 beat("memory panel");
@@ -154,14 +159,14 @@ await page.evaluate(() => {
   );
   if (h) h.scrollIntoView({ behavior: "smooth", block: "start" });
 });
-await wait(4500);
+await wait(3500);
 await page.evaluate(() => window.scrollBy({ top: 520, behavior: "smooth" }));
-await wait(7000);
+await wait(5200);
 
 // ── 1:17 ─ Close on the hero. ───────────────────────────────────────────
 beat("close");
 await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
-await wait(3200);
+await wait(2600);
 
 beat("END");
 await ctx.close();
