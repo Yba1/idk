@@ -1,7 +1,9 @@
 """FastAPI entrypoint. Run with:
     backend/venv/Scripts/python -m uvicorn backend.api.main:app --reload --port 8000
-Loads .env before any route constructs a ParitokLLMClient, so the key never
+Loads .env before any route constructs a service client, so the key never
 passes through a Claude-visible tool call.
+
+FROZEN at tag contracts-v1. Do not edit on a feature branch.
 """
 from __future__ import annotations
 
@@ -28,7 +30,10 @@ from backend.api.limiter import limiter  # noqa: E402
 from backend.api.routes.atlas import router as atlas_router  # noqa: E402
 from backend.api.routes.conditions import router as conditions_router  # noqa: E402
 from backend.api.routes.demo import router as demo_router  # noqa: E402
+from backend.api.routes.economics import router as economics_router  # noqa: E402
+from backend.api.routes.memory import router as memory_router  # noqa: E402
 from backend.api.routes.query import router as query_router  # noqa: E402
+from backend.contracts.registry import get_services  # noqa: E402
 
 app = FastAPI(title="NeuLitTrace API")
 
@@ -46,8 +51,18 @@ app.include_router(query_router)
 app.include_router(demo_router)
 app.include_router(conditions_router)
 app.include_router(atlas_router)
+app.include_router(economics_router)   # stub at freeze; Card 1 fills the module
+app.include_router(memory_router)      # stub at freeze; Card 2A fills the module
 
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    services = get_services()
+    ports = {
+        "retrieval": services.retrieval.health(),
+        "llm": services.llm.health(),
+        "memory": services.memory.health(),
+        "ledger": services.ledger.health(),
+    }
+    status = "ok" if all(p.get("ok") for p in ports.values()) else "degraded"
+    return {"status": status, "ports": ports}

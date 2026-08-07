@@ -1,0 +1,7 @@
+backend/data/seed_output.json
+obsidian/
+.env
+compress_trace.jsonl
+__pycache__/
+*.pyc
+node_modules/

@@ -1,0 +1,56 @@
+# Ownership tripwire glob table for scripts/check-ownership.sh.
+# One line per (lane, glob) pair. Lane is c1, c2a, or c2b. Glob is matched
+# against staged paths with bash `case`, so a bare `*` already matches `/`
+# (no `**` needed). FROZEN and "untouched by everyone" paths from
+# plan-v2/00-SHARED-CONTRACTS.md section 3 are deliberately absent here —
+# no lane may stage them.
+
+c1 backend/snowflake/*
+c1 backend/app/llm/*
+c1 backend/app/retrieval/*
+c1 backend/app/corpus/*
+c1 backend/api/routes/economics.py
+c1 backend/api/routes/conditions.py
+c1 backend/requirements-snowflake.txt
+c1 config/snowflake.yaml
+c1 snowflake/sql/*
+c1 backend/tests/snowflake/*
+c1 backend/tests/test_hybrid_retrieval.py
+c1 backend/tests/test_retrieval_gold_set.py
+c1 backend/tests/test_corpus_coverage.py
+c1 backend/tests/test_build_corpus.py
+c1 backend/tests/test_fetch_pubmed.py
+c1 backend/tests/test_llm_client.py
+c1 backend/tests/test_api_conditions.py
+c1 backend/measurement/*
+
+c2a backend/memory/*
+c2a backend/app/pipeline.py
+c2a backend/app/loop/*
+c2a backend/app/summary/*
+c2a backend/app/verify/*
+c2a backend/api/routes/memory.py
+c2a backend/api/routes/query.py
+c2a backend/api/routes/demo.py
+c2a backend/api/schemas.py
+c2a backend/api/dependencies.py
+c2a backend/requirements-memory.txt
+c2a config/evermind.yaml
+c2a backend/tests/memory/*
+c2a backend/tests/test_search_loop.py
+c2a backend/tests/test_loop_prompts.py
+c2a backend/tests/test_summary_generate.py
+c2a backend/tests/test_citation_check.py
+c2a backend/tests/test_pipeline_integration.py
+c2a backend/tests/test_api_query.py
+c2a backend/tests/test_api_demo.py
+c2a backend/tests/test_query_stream.py
+c2a backend/tests/test_multiturn_session.py
+c2a backend/tests/test_seed.py
+c2a backend/seed.py
+
+c2b frontend/*
+c2b docs/*
+c2b README.md
+c2b package.json
+c2b package-lock.json
