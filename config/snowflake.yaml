@@ -1,0 +1,41 @@
+# Non-secret Snowflake platform configuration for Card 1's implementations.
+# Credentials (account/user/password) come only from SNOWFLAKE_* env vars
+# (see .env.example) — never put a secret in this file, it is committed.
+
+database: NEULIT
+schema: CORE
+warehouse: NEULIT_WH
+role: NEULIT_APP
+
+search_service: NEULIT.CORE.PAPERS_SEARCH
+tables:
+  papers: NEULIT.CORE.PAPERS
+  conditions: NEULIT.CORE.CONDITIONS
+  token_ledger: NEULIT.CORE.TOKEN_LEDGER
+  model_pricing: NEULIT.CORE.MODEL_PRICING
+views:
+  cost_by_call_site: NEULIT.CORE.V_COST_BY_CALL_SITE
+  cost_per_request: NEULIT.CORE.V_COST_PER_REQUEST
+  cost_by_hour: NEULIT.CORE.V_COST_BY_HOUR
+
+embedding_model: snowflake-arctic-embed-m
+embedding_dim: 768
+
+# Default Cortex COMPLETE model. Overridden by SNOWFLAKE_CORTEX_MODEL at
+# runtime; this is only the fallback when that env var is unset.
+default_cortex_model: claude-sonnet-4-5
+
+statement_timeout_seconds: 30
+llm_timeout_seconds: 20
+llm_max_retries: 3
+
+ledger:
+  queue_maxsize: 1000
+  flush_interval_seconds: 2
+  flush_batch_size: 25
+
+retrieval:
+  overfetch_min: 40
+  overfetch_multiplier: 4
+  primary_weight: 0.6
+  secondary_weight: 0.4
