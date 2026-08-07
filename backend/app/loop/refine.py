@@ -8,18 +8,35 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from backend.app.llm_client import ParitokLLMClient
 from backend.app.loop.hyde import build_hyde_prompt
 from backend.app.loop.relevance_check import run_relevance_check_batch
 from backend.app.loop.trace import LoopTraceEntry
-from backend.app.retrieval.hybrid import HybridRetriever
+from backend.contracts.models import ScoredPaper
+from backend.contracts.ports import LLMPort, RetrievalPort
+
+
+def _paper_dict(sp: ScoredPaper) -> dict:
+    return {
+        "pmid": sp.paper.pmid,
+        "title": sp.paper.title,
+        "abstract": sp.paper.abstract,
+        "journal": sp.paper.journal,
+        "year": sp.paper.year,
+        "condition": sp.paper.condition,
+        "is_rare": sp.paper.is_rare,
+        "url": sp.paper.url,
+        "score": sp.score,
+    }
 
 
 def run_search_loop(
-    client: ParitokLLMClient,
-    retriever: HybridRetriever,
+    client: LLMPort,
+    retriever: RetrievalPort,
     query: str,
     *,
+    request_id: str,
+    session_id: str,
+    user_id: str,
     max_iterations: int = 2,
     top_k: int = 5,
     on_stage: Callable[[str, dict], None] | None = None,
@@ -34,17 +51,30 @@ def run_search_loop(
             hyde_messages[-1]["content"] += f"\nPrior iteration reasoning: {prior_reasoning}"
         if on_stage:
             on_stage("hyde_expand", {"iteration": iteration})
-        hyde_result = client.chat(hyde_messages)
+        hyde_result = client.chat(
+            hyde_messages,
+            call_site="hyde",
+            request_id=request_id,
+            session_id=session_id,
+            user_id=user_id,
+        )
 
         # Run retrieval with both raw query and HyDE-expanded text (weighted merge)
         retrieved = retriever.search(current_query, secondary_query=hyde_result.content, top_k=top_k)
-        papers = [p for p, _ in retrieved]
+        papers = [_paper_dict(sp) for sp in retrieved]
         if on_stage:
             on_stage("retrieval", {"iteration": iteration})
 
         # Batch relevance check: evaluate all top-k papers at once
         if papers:
-            batch_check = run_relevance_check_batch(client, current_query, papers)
+            batch_check = run_relevance_check_batch(
+                client,
+                current_query,
+                papers,
+                request_id=request_id,
+                session_id=session_id,
+                user_id=user_id,
+            )
             relevant_results = batch_check.get("results", {})
 
             # Filter to only relevant papers
@@ -95,5 +125,11 @@ def run_search_loop(
         ]
         if on_stage:
             on_stage("refine_query", {"iteration": iteration})
-        refined = client.chat(refine_prompt)
+        refined = client.chat(
+            refine_prompt,
+            call_site="refine",
+            request_id=request_id,
+            session_id=session_id,
+            user_id=user_id,
+        )
         current_query = refined.content or current_query

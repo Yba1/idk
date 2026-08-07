@@ -5,6 +5,7 @@ import logging
 import queue
 import re
 import threading
+import uuid
 from collections.abc import Callable
 from dataclasses import asdict
 
@@ -20,11 +21,10 @@ from backend.api.schemas import (
     QueryResponse,
     SuggestedConditionOut,
 )
+from backend.contracts.ports import LLMPort, RetrievalPort
 from backend.app.corpus.conditions import CONDITIONS
-from backend.app.llm_client import ParitokLLMClient
 from backend.app.loop.refine import run_search_loop
 from backend.app.retrieval.condition_match import NO_MATCH_THRESHOLD
-from backend.app.retrieval.hybrid import HybridRetriever
 from backend.app.retrieval.query_specificity import build_example_query, is_query_too_generic
 from backend.app.summary.generate import generate_sourced_summary
 from backend.app.verify.citation_check import check_citations, check_differential
@@ -46,23 +46,35 @@ def _is_self_reference(candidate_name: str, best_condition: str) -> bool:
 
 def _run_query_pipeline(
     payload: QueryRequest,
-    client: ParitokLLMClient,
-    retriever: HybridRetriever,
+    client: LLMPort,
+    retriever: RetrievalPort,
+    *,
+    request_id: str,
+    session_id: str,
+    user_id: str,
     on_stage: Callable[[str, dict], None] | None = None,
 ) -> QueryResponse:
-    papers, trace = run_search_loop(client, retriever, payload.query, on_stage=on_stage)
+    papers, trace = run_search_loop(
+        client,
+        retriever,
+        payload.query,
+        request_id=request_id,
+        session_id=session_id,
+        user_id=user_id,
+        on_stage=on_stage,
+    )
     low_confidence = bool(trace) and not trace[-1].relevant
     too_generic = is_query_too_generic(payload.query)
 
     # Check if no papers survived the relevance filter
     if not papers:
         # Out-of-scope query: get suggested conditions
-        closest = retriever.get_closest_conditions(payload.query, top_n=3)
+        closest = retriever.closest_conditions(payload.query, top_n=3)
         suggested_conditions = []
-        for condition_name, similarity, paper_count in closest:
-            if similarity >= NO_MATCH_THRESHOLD:
+        for match in closest:
+            if match.similarity >= NO_MATCH_THRESHOLD:
                 suggested_conditions.append(
-                    SuggestedConditionOut(name=condition_name, paper_count=paper_count)
+                    SuggestedConditionOut(name=match.condition, paper_count=match.paper_count)
                 )
 
         example_query = None
@@ -88,25 +100,34 @@ def _run_query_pipeline(
 
     top_papers = papers[:5] if papers else []
 
-    # Check if best-matching condition has sparse coverage.
-    # corpus_paper_count is computed against the FULL corpus (retriever.papers),
-    # not the relevance-filtered/capped `papers` list, which can never exceed 5
-    # items (run_search_loop calls retriever.search(..., top_k=5)).
+    # Check if best-matching condition has sparse coverage. corpus_paper_count
+    # is the FULL corpus count for the condition (from the static corpus
+    # scope table's target_count - CortexSearchRetriever has no in-memory
+    # corpus to count against directly, unlike v1's HybridRetriever), not the
+    # relevance-filtered/capped `papers` list, which can never exceed 5 items
+    # (run_search_loop calls retriever.search(..., top_k=5)).
     if top_papers:
         best_condition = top_papers[0].get("condition", "")
-        corpus_paper_count = sum(1 for p in retriever.papers if p.get("condition") == best_condition)
     else:
         best_condition = ""
-        corpus_paper_count = 0
-
-    sparse_coverage = corpus_paper_count < SPARSITY_FLOOR
 
     # Look up static condition facts before the summary call (data available
     # regardless of whether the summary call itself later degrades).
     condition_lookup = next((c for c in CONDITIONS if c.name == best_condition), None)
+    corpus_paper_count = condition_lookup.target_count if condition_lookup else 0
+
+    sparse_coverage = corpus_paper_count < SPARSITY_FLOOR
 
     summary = generate_sourced_summary(
-        client, payload.query, top_papers, low_confidence=low_confidence, sparse_coverage=sparse_coverage, on_stage=on_stage,
+        client,
+        payload.query,
+        top_papers,
+        request_id=request_id,
+        session_id=session_id,
+        user_id=user_id,
+        low_confidence=low_confidence,
+        sparse_coverage=sparse_coverage,
+        on_stage=on_stage,
     )
 
     # generate_sourced_summary builds citations in the same order as top_papers
@@ -135,11 +156,26 @@ def _run_query_pipeline(
 
         def _run_citations() -> None:
             results["flagged_claims"] = check_citations(
-                client, payload.query, summary.raw_text, top_papers, on_stage=on_stage
+                client,
+                payload.query,
+                summary.raw_text,
+                top_papers,
+                request_id=request_id,
+                session_id=session_id,
+                user_id=user_id,
+                on_stage=on_stage,
             )
 
         def _run_differential() -> None:
-            results["differential"] = check_differential(client, top_papers, candidates, on_stage=on_stage)
+            results["differential"] = check_differential(
+                client,
+                top_papers,
+                candidates,
+                request_id=request_id,
+                session_id=session_id,
+                user_id=user_id,
+                on_stage=on_stage,
+            )
 
         threads = [threading.Thread(target=_run_citations)]
         if candidates:
@@ -188,15 +224,26 @@ def _run_query_pipeline(
     )
 
 
+def _request_scoped_ids(request: Request) -> tuple[str, str, str]:
+    request_id = str(uuid.uuid4())
+    session_id = request.headers.get("x-session-id") or request_id
+    user_id = request.headers.get("x-user-id") or "anonymous"
+    return request_id, session_id, user_id
+
+
 @router.post("/query", response_model=QueryResponse)
 @limiter.limit("10/minute")
 def query(
     request: Request,
     payload: QueryRequest,
-    client: ParitokLLMClient = Depends(get_llm_client),
-    retriever: HybridRetriever = Depends(get_retriever),
+    client: LLMPort = Depends(get_llm_client),
+    retriever: RetrievalPort = Depends(get_retriever),
 ) -> QueryResponse:
-    return _run_query_pipeline(payload, client, retriever)
+    request_id, session_id, user_id = _request_scoped_ids(request)
+    return _run_query_pipeline(
+        payload, client, retriever,
+        request_id=request_id, session_id=session_id, user_id=user_id,
+    )
 
 
 @router.post("/query/stream")
@@ -204,9 +251,10 @@ def query(
 def query_stream(
     request: Request,
     payload: QueryRequest,
-    client: ParitokLLMClient = Depends(get_llm_client),
-    retriever: HybridRetriever = Depends(get_retriever),
+    client: LLMPort = Depends(get_llm_client),
+    retriever: RetrievalPort = Depends(get_retriever),
 ) -> StreamingResponse:
+    request_id, session_id, user_id = _request_scoped_ids(request)
     event_queue: queue.Queue = queue.Queue()
 
     def on_stage(stage: str, detail: dict) -> None:
@@ -214,7 +262,11 @@ def query_stream(
 
     def worker() -> None:
         try:
-            result = _run_query_pipeline(payload, client, retriever, on_stage=on_stage)
+            result = _run_query_pipeline(
+                payload, client, retriever,
+                request_id=request_id, session_id=session_id, user_id=user_id,
+                on_stage=on_stage,
+            )
             event_queue.put({"type": "done", "result": result.model_dump()})
         except Exception:
             logger.exception("Unhandled error in /query/stream pipeline")
