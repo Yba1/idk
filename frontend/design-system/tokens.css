@@ -1,0 +1,52 @@
+/* frontend/design-system/tokens.css
+ * Trace — light direction. Import from globals.css ABOVE the @theme block.
+ * Base hue 258.28 (12 deg off the sampled #529EDE, so the blue is ours).
+ * The contrast rule is in MASTER.md section 2.1 and is not optional.
+ */
+
+:root {
+  /* Blue ramp */
+  --blue-50:  oklch(0.9800 0.0110 258.28);  /* page tint, hover fills            */
+  --blue-100: oklch(0.9560 0.0230 258.28);  /* selected rows, soft chips         */
+  --blue-200: oklch(0.9080 0.0470 258.28);  /* borders on tinted surfaces        */
+  --blue-300: oklch(0.8420 0.0760 258.28);  /* dividers, inactive states         */
+  --blue-400: oklch(0.7550 0.1050 258.28);  /* chart secondary series            */
+  --blue-500: oklch(0.6781 0.1215 258.28);  /* brand. FILLS AND SHAPES ONLY      */
+  --blue-600: oklch(0.5900 0.1230 258.28);  /* chart primary, button fill floor  */
+  --blue-700: oklch(0.5050 0.1180 258.28);  /* blue TEXT, links, icons, buttons  */
+  --blue-800: oklch(0.4200 0.1080 258.28);  /* emphasis text, active nav         */
+  --blue-900: oklch(0.3450 0.0940 258.28);  /* headings on blue tint             */
+
+  /* Neutrals */
+  --ink:   oklch(0.2261 0.0210 264.02);     /* primary text, 17:1                */
+  --muted: oklch(0.4500 0.0180 264);        /* secondary body copy, ~8.5:1       */
+  --dim:   oklch(0.5500 0.0200 264);        /* metadata, labels, ~6.2:1          */
+  --rule:  oklch(0.8217 0.0244 272.76);     /* hairline borders                  */
+
+  /* Only non-blue semantic. Means exactly one thing:
+     this claim could not be verified against its source. */
+  --warn:    #B45309;                        /* 5.9:1 on white                   */
+  --warn-bg: #FEF6EC;
+  --warn-bg-soft: #FFFCF7;
+
+  /* Type */
+  --font-display: "Newsreader", Georgia, serif;
+  --font-body:    "Source Sans 3", system-ui, sans-serif;
+  --font-data:    "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Surface */
+  --radius-panel:   4px;
+  --radius-control: 3px;
+  --radius-chip:    2px;
+  --shadow-input:   0 1px 2px oklch(0.2261 0.021 264.02 / 0.04);
+  --shadow-glow:    0 18px 50px oklch(0.6781 0.1215 258.28 / 0.13);
+  --ease:           cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

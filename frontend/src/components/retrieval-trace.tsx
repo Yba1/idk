@@ -2,38 +2,46 @@
 import type { TraceEntry } from "@/lib/api";
 
 export function RetrievalTrace({ trace }: { trace: TraceEntry[] }) {
-  if (trace.length === 0) return null;
+  if (trace.length === 0) {
+    return <p className="p-6 font-body text-sm text-dim">No retrieval rounds recorded.</p>;
+  }
 
   return (
-    <div
-      className="grid gap-5"
-      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}
-    >
-      {trace.map((entry, index) => (
+    <div>
+      {trace.map((entry) => (
         <div
           key={entry.iteration}
-          style={{ animationDelay: `${index * 200}ms` }}
-          className={`glass-panel p-5 flex flex-col gap-3 opacity-100 [animation-fill-mode:backwards] motion-safe:animate-[trace-reveal_400ms_ease-out] border-l-4 ${
-            entry.relevant ? "border-l-rare" : "border-l-accent-pink"
-          }`}
+          className="grid items-center gap-5 border-t border-rule py-[18px] first:border-t-0"
+          style={{ gridTemplateColumns: "44px minmax(0,1fr) 120px 92px" }}
         >
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white"
-            style={{ background: 'linear-gradient(135deg, var(--accent-purple), var(--accent-pink))' }}
+          <span className="font-data text-xs text-dim">{String(entry.iteration).padStart(2, "0")}</span>
+          <div>
+            <p className="font-body text-sm font-semibold text-ink">Iteration {entry.iteration}</p>
+            <p className="mt-1 font-body text-[12.5px] text-trace-muted">
+              {entry.note}
+              {entry.memory_applied && " · memory applied"}
+              {entry.seen_filtered > 0 && ` · ${entry.seen_filtered} seen filtered`}
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="h-1 w-24 overflow-hidden rounded-full bg-blue-200">
+                <span
+                  className={`block h-full ${entry.relevant ? "bg-blue-600" : "bg-rule"}`}
+                  style={{ width: `${Math.round(entry.confidence * 100)}%` }}
+                />
+              </span>
+              <span className="font-data text-[11px] text-dim">Confidence {entry.confidence.toFixed(2)}</span>
+            </div>
+          </div>
+          <span className="font-data text-xs text-dim">{entry.retrieved_pmids.length} retrieved</span>
+          <span
+            className={`w-fit whitespace-nowrap rounded-[2px] border px-2 py-1 font-data text-[10px] ${
+              entry.relevant
+                ? "border-blue-200 bg-blue-100 text-blue-800"
+                : "border-rule bg-white text-dim"
+            }`}
           >
-            {index + 1}
-          </div>
-          <p className="font-body text-ink text-sm font-bold">{entry.note}</p>
-          <div className="flex flex-col gap-1">
-            <span className="font-body text-xs text-mist">Iteration <span className="font-bold">{entry.iteration}</span></span>
-            <span className="font-body text-xs text-mist">confidence <span className="font-bold">{entry.confidence.toFixed(2)}</span></span>
-            <span className="font-body text-xs text-mist">
-              memory <span className="font-bold">{entry.memory_applied ? "applied" : "not applied"}</span>
-            </span>
-            {entry.seen_filtered > 0 && (
-              <span className="font-body text-xs text-rare">{entry.seen_filtered} seen filtered</span>
-            )}
-          </div>
+            {entry.relevant ? "PASS" : "LOW CONFIDENCE"}
+          </span>
         </div>
       ))}
     </div>

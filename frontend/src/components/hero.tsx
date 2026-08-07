@@ -2,78 +2,108 @@
 "use client";
 
 import { NeuronCanvas } from "@/components/neuron-canvas";
-import Image from "next/image";
-import Link from "next/link";
+import { SectionRail } from "@/components/section-rail";
+
+function CornerTick({ className }: { className: string }) {
+  return <span className={`absolute h-3 w-3 border-blue-300 ${className}`} aria-hidden="true" />;
+}
 
 export function Hero() {
   return (
-    <section className="relative min-h-screen flex flex-col overflow-hidden">
+    <section className="relative flex min-h-[760px] flex-col overflow-hidden">
+      {/* 1. Glow blooms */}
+      <div className="absolute inset-0 z-0" aria-hidden="true">
+        <span
+          className="absolute rounded-full blur-3xl motion-safe:animate-[hero-bloom-a_20s_ease-in-out_infinite]"
+          style={{
+            top: "5%",
+            right: "4%",
+            width: "44%",
+            height: "48%",
+            background: "radial-gradient(circle, oklch(0.6781 0.1215 258.28 / 0.32), transparent 72%)",
+          }}
+        />
+        <span
+          className="absolute rounded-full blur-3xl motion-safe:animate-[hero-bloom-b_26s_ease-in-out_infinite] [animation-delay:3s]"
+          style={{
+            bottom: "8%",
+            right: "18%",
+            width: "36%",
+            height: "40%",
+            background: "radial-gradient(circle, oklch(0.6781 0.1215 258.28 / 0.2), transparent 72%)",
+          }}
+        />
+      </div>
+
+      {/* 2. Neuron canvas */}
+      <NeuronCanvas particleCount={54} rootX={0.7} rootY={1.0} className="absolute inset-0 z-[1] h-full w-full" />
+
+      {/* 3. White veils - keep the copy legible without dimming the canvas */}
       <div
-        className="absolute inset-0 z-0"
+        className="pointer-events-none absolute inset-0 z-[2]"
         aria-hidden="true"
         style={{
-          WebkitMaskImage: "linear-gradient(to bottom, black, black 55%, transparent 100%)",
-          maskImage: "linear-gradient(to bottom, black, black 55%, transparent 100%)",
+          background:
+            "linear-gradient(to bottom, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.72) 26%, rgba(255,255,255,0.12) 48%, transparent 64%)",
         }}
-      >
-        <div
-          className="absolute rounded-full blur-3xl"
-          style={{
-            top: "8%",
-            left: "5%",
-            width: "52%",
-            height: "60%",
-            background: "radial-gradient(circle, oklch(0.5 0.19 296 / 0.55), transparent 70%)",
-          }}
-        />
-        <div
-          className="absolute rounded-full blur-3xl"
-          style={{
-            bottom: "18%",
-            right: "8%",
-            width: "48%",
-            height: "45%",
-            background: "radial-gradient(circle, oklch(0.62 0.2 350 / 0.4), transparent 70%)",
-          }}
-        />
-        <NeuronCanvas particleCount={46} rootX={0.68} rootY={0.42} />
-      </div>
+      />
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 z-[2] w-[56%]"
+        aria-hidden="true"
+        style={{
+          background:
+            "linear-gradient(to right, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.78) 46%, transparent 100%)",
+        }}
+      />
 
-      <div className="relative z-[2] flex items-center justify-between px-6 py-9 md:px-12">
-        <span className="flex items-center gap-3">
-          <Image src="/logo-n.svg" alt="" width={32} height={32} className="rounded-[8px]" />
-          <span className="font-body text-sm font-semibold uppercase tracking-[0.22em] text-ink">
-            NeuLitTrace
-          </span>
-        </span>
-        <div className="flex items-center gap-3">
-          <Link href="/economy" className="font-body text-xs text-mist underline hover:text-ink">Token economy</Link>
-          <span className="rounded-full border border-line-bright bg-void-2/40 px-4 py-2 font-body text-xs tracking-[0.08em] text-mist backdrop-blur-md">
-            Snowflake + EverMind
-          </span>
-        </div>
-      </div>
+      {/* 4. Corner registration ticks */}
+      <CornerTick className="left-10 top-10 border-l border-t" />
+      <CornerTick className="right-10 top-10 border-r border-t" />
+      <CornerTick className="bottom-10 left-10 border-b border-l" />
+      <CornerTick className="bottom-10 right-10 border-b border-r" />
 
-      <div className="relative z-[2] flex flex-1 flex-col justify-center px-6 md:px-12 max-w-4xl">
-        <span className="eyebrow mb-5">Retrieval, for the rare case</span>
-        <h1 className="font-display font-medium text-ink leading-[1.05] text-[clamp(44px,7vw,88px)] mb-7">
+      {/* 5. Content */}
+      <div className="relative z-[3] max-w-[1040px] px-6 pt-[88px] md:px-16">
+        <SectionRail number="§00" eyebrow="Retrieval, for the rare case" />
+        <h1 className="mt-5 font-display text-[clamp(44px,7vw,86px)] font-medium leading-[1.02] tracking-[-0.028em] text-ink">
           Trace the rare case
           <br />
           back to its source.
         </h1>
-        <p className="font-body text-lg leading-relaxed text-paper max-w-xl">
-          A literature-verification engine for rare PET and neuroimaging findings:
-          weighted toward the underexplored, backed by citations at every step.
-        </p>
-        <p className="mt-5 font-body text-sm text-mist">Retrieval and inference on Snowflake · memory by EverMind</p>
       </div>
 
-      <div className="relative z-[2] flex flex-col items-center gap-2 pb-9 font-body text-xs uppercase tracking-[0.1em] text-mist">
-        <span>Scroll to explore</span>
-        <div
-          className="h-[22px] w-px motion-safe:animate-bounce"
-          style={{ background: "linear-gradient(var(--accent-pink), transparent)" }}
-        />
+      <div className="relative z-[3] mt-auto grid gap-14 px-6 pb-16 pt-[120px] md:grid-cols-[minmax(0,470px)_1fr_auto] md:items-end md:px-16">
+        <p className="font-body text-[17px] leading-[1.7] text-trace-muted">
+          Rare-weighted retrieval across 329 case reports in 14 conditions. Every sentence carries a
+          numbered citation, and every citation is checked against its source abstract before you read it.
+        </p>
+
+        <a
+          href="#query"
+          className="inline-flex w-fit items-center gap-2 border-b border-ink pb-[7px] font-body text-sm font-semibold text-ink"
+        >
+          Begin a query <span className="font-data text-blue-700">↓</span>
+        </a>
+
+        <div className="flex gap-6 border-l border-rule pl-6">
+          {[
+            ["329", "CASE REPORTS"],
+            ["14", "CONDITIONS"],
+            ["4 of 4", "CLAIMS TRACED"],
+          ].map(([value, label]) => (
+            <div key={label} className="flex flex-col gap-1.5">
+              <span className="font-data text-[19px] text-ink">{value}</span>
+              <span className="font-body text-[10.5px] tracking-[0.1em] text-dim uppercase">{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute bottom-[26px] left-6 z-[3] flex items-center gap-2 md:left-16">
+        <span className="h-[5px] w-[5px] rounded-full bg-blue-500 motion-safe:animate-pulse" aria-hidden="true" />
+        <span className="font-data text-[10px] text-dim">
+          Live render · depth 5 · 8 primary · 0.72 decay · illustrative, not patient data
+        </span>
       </div>
     </section>
   );

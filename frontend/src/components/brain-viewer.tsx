@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { API_BASE_URL, getAtlasQueryUrl, getAtlasUrl, getConditions, getDefaultAtlasUrl, type Condition } from "@/lib/api";
 import { buildAnchors, type Anchor, type AnchorId } from "@/lib/brain-anchors";
 import { BrainCanvas } from "@/components/brain-canvas";
-import { SectionGlow } from "@/components/section-glow";
-import { NeuronCanvas } from "@/components/neuron-canvas";
+import { SectionRail } from "@/components/section-rail";
+import { RarityComparison } from "@/components/rarity-comparison";
 
 type Props = {
   citedConditionNames?: string[];
@@ -20,8 +20,8 @@ export function BrainViewer({ citedConditionNames = [] }: Props) {
   const [hasError, setHasError] = useState(false);
   const [isAtlasLoaded, setIsAtlasLoaded] = useState(false);
   const [isAtlasSwapping, setIsAtlasSwapping] = useState(false);
-  const [view, setView] = useState<"trace" | "atlas">("trace");
-  const [atlasRequested, setAtlasRequested] = useState(false);
+  const [view, setView] = useState<"trace" | "atlas">("atlas");
+  const [atlasRequested, setAtlasRequested] = useState(true);
 
   useEffect(() => {
     getConditions()
@@ -97,187 +97,186 @@ export function BrainViewer({ citedConditionNames = [] }: Props) {
   }
 
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex flex-col items-center max-w-[640px] mx-auto w-full mb-12">
-        <p className="eyebrow">Interactive atlas</p>
-        <h2 className="font-display text-3xl md:text-4xl text-ink text-center">Rare conditions, traced to their region.</h2>
-        <p className="font-body text-mist text-center mt-4">Hover the brain to see what a region represents. Click a condition below to see which generalized region its literature associates it with.</p>
+    <section className="bg-blue-50 px-6 py-[110px] md:px-16">
+      <div className="mb-10 flex flex-col justify-between gap-6 md:flex-row md:items-end">
+        <div>
+          <SectionRail number="§02" eyebrow="Anatomical atlas" />
+          <h2 className="mt-5 font-display text-[clamp(28px,4vw,44px)] font-medium text-ink">
+            Rare conditions, traced to their region.
+          </h2>
+        </div>
+        <p className="max-w-[400px] font-body text-sm text-trace-muted">
+          Harvard-Oxford surface atlas, rendered by nilearn from the backend. Hover a region to read what
+          the corpus associates with it.
+        </p>
       </div>
 
-      <div className="relative">
-        <div
-          className="absolute inset-0 z-0 pointer-events-none overflow-hidden rounded-[16px]"
-          style={{
-            WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 55%, transparent 92%)",
-            maskImage: "linear-gradient(to bottom, black 0%, black 55%, transparent 92%)",
-          }}
-          aria-hidden="true"
-        >
-          <NeuronCanvas particleCount={60} rootX={0.3} rootY={0.5} className="absolute inset-0 h-full w-full opacity-80" />
-        </div>
-        <SectionGlow className="relative z-10 grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-8 items-stretch">
-        <div className="glass-panel relative h-[460px] md:h-[720px] w-full overflow-hidden">
-          {hasError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-void-2 z-10">
-              <p className="font-body text-mist text-sm">Atlas view unavailable right now.</p>
-            </div>
-          )}
-          {!hasError && anchors.length > 0 && (
-            <div
-              className="absolute inset-0 transition-opacity duration-300"
-              style={{ opacity: view === "trace" ? 1 : 0, pointerEvents: view === "trace" ? "auto" : "none" }}
-            >
-              <BrainCanvas
-                anchors={anchors}
-                activeAnchorId={activeAnchorId}
-                onHover={setHoverId}
-                onSelect={(id) => {
-                  setSelectedId(id);
-                  setPressedAnchorId(id);
-                }}
-              />
-            </div>
-          )}
-          {!hasError && atlasRequested && (
-            <iframe
-              src={atlasSrc}
-              onLoad={handleAtlasLoad}
-              title="Anatomical atlas"
-              className="absolute inset-0 h-full w-full border-0 transition-opacity duration-500"
-              style={{
-                opacity: view === "atlas" ? (isAtlasSwapping ? 0.55 : isAtlasLoaded ? 1 : 0) : 0,
-                pointerEvents: view === "atlas" ? "auto" : "none",
-              }}
-            />
-          )}
-
-          {!hasError && (
-            <div className="absolute top-3 right-3 z-10 flex gap-1 rounded-full border border-line-bright bg-void-2/60 backdrop-blur-sm p-1">
+      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="relative border border-rule bg-white shadow-[var(--shadow-glow)]">
+          <div className="flex items-center justify-between border-b border-rule px-[18px] py-3.5">
+            <span className="font-data text-[11px] text-dim">Harvard-Oxford · nilearn</span>
+            <div className="flex gap-[3px] border border-rule p-[3px]">
               <button
-                onClick={() => selectView("trace")}
-                className={`rounded-full px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors ${
-                  view === "trace" ? "bg-accent-purple/25 text-ink" : "text-mist hover:text-ink"
-                }`}
-              >
-                3D trace
-              </button>
-              <button
+                type="button"
                 onClick={() => selectView("atlas")}
-                className={`rounded-full px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors ${
-                  view === "atlas" ? "bg-accent-purple/25 text-ink" : "text-mist hover:text-ink"
+                className={`px-2.5 py-1 font-body text-xs ${
+                  view === "atlas" ? "bg-blue-100 text-blue-800" : "text-dim"
                 }`}
               >
                 Atlas scan
               </button>
+              <button
+                type="button"
+                onClick={() => selectView("trace")}
+                className={`px-2.5 py-1 font-body text-xs ${
+                  view === "trace" ? "bg-blue-100 text-blue-800" : "text-dim"
+                }`}
+              >
+                3D trace
+              </button>
             </div>
-          )}
-
-          <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex flex-col items-center gap-0.5 text-center">
-            <span className="font-body text-[10px] uppercase tracking-wider text-mist-dim/80">
-              {view === "trace" ? "Stylized rendering" : "Harvard-Oxford atlas · nilearn"}
-            </span>
-            <span className="font-body text-[11px] text-mist-dim">
-              {view === "trace"
-                ? "Drag to rotate, scroll or pinch to zoom, click a region to see the affected area."
-                : isAtlasLoaded
-                  ? "Real anatomical render. Hover or tap a region to see its name and associated conditions."
-                  : "Loading anatomical render…"}
-            </span>
           </div>
-        </div>
 
-        <div className="glass-panel flex flex-col p-7 min-h-[360px] md:min-h-[560px]">
-          <div className="flex-1">
-            {activeAnchor ? (
-              <>
-                <div className="eyebrow mb-2">{activeAnchor.label}</div>
-                <p className="font-body text-sm leading-relaxed text-mist mb-6">{activeAnchor.blurb}</p>
-                <div className="flex flex-col">
-                  {citedConditionSet.size > 0 && (
-                    <>
-                      {activeAnchor.conditions
-                        .filter((c) => citedConditionSet.has(c.name))
-                        .map((c) => (
-                          <div key={c.name} className="py-3 border-t border-line first:border-t-0">
-                            <div className="flex justify-between items-baseline gap-3 mb-1.5">
-                              <span className="font-body text-sm font-semibold text-ink">{c.name}</span>
-                              <span className="text-[11px] font-semibold uppercase tracking-wide px-2.5 py-0.5 rounded-full whitespace-nowrap text-accent-purple bg-accent-purple/10">
-                                Cited in this answer
-                              </span>
-                            </div>
-                            <p className="font-body text-[13.5px] leading-relaxed text-mist">{c.region_literature}</p>
-                          </div>
-                        ))}
-                      {activeAnchor.conditions.some((c) => !citedConditionSet.has(c.name)) && (
-                        <p className="eyebrow mt-4 mb-1">Other conditions in this region</p>
-                      )}
-                    </>
-                  )}
-                  {activeAnchor.conditions
-                    .filter((c) => citedConditionSet.size === 0 || !citedConditionSet.has(c.name))
-                    .map((c) => (
-                      <div key={c.name} className="py-3 border-t border-line first:border-t-0">
-                        <div className="flex justify-between items-baseline gap-3 mb-1.5">
-                          <span className="font-body text-sm font-semibold text-ink">{c.name}</span>
-                          <span
-                            className={`text-[11px] font-semibold uppercase tracking-wide px-2.5 py-0.5 rounded-full whitespace-nowrap ${
-                              c.rarity === "rare" ? "text-rare bg-rare/10" : "text-common bg-common/10"
-                            }`}
-                          >
-                            {c.rarity === "rare" ? "Rare finding" : "Common baseline"}
-                          </span>
-                        </div>
-                        <p className="font-body text-[13.5px] leading-relaxed text-mist">{c.region_literature}</p>
-                      </div>
-                    ))}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="eyebrow mb-2">Atlas overview</div>
-                <p className="font-body text-sm leading-relaxed text-paper mb-6">
-                  NeuLitTrace maps this corpus&apos;s literature-anchored presentations across cortical, subcortical, and
-                  midbrain structures. Hover a region, or a condition below, to inspect its associated case literature.
-                </p>
-                <div className="flex flex-col">
-                  <div className="eyebrow mb-2">Examples</div>
-                  {conditions.slice(0, 4).map((c) => (
-                    <div key={c.name} className="py-2.5 border-t border-line first:border-t-0">
-                      <p className="font-body text-sm text-mist">
-                        Try: <span className="font-semibold text-ink">{c.name}</span>
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </>
+          <div
+            className="relative h-[460px] overflow-hidden md:h-[520px]"
+            style={{ background: "radial-gradient(ellipse at 50% 45%, var(--blue-50) 0%, #fff 68%)" }}
+          >
+            {hasError && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white">
+                <p className="font-body text-sm text-dim">Atlas view unavailable right now.</p>
+              </div>
             )}
+            {!hasError && anchors.length > 0 && (
+              <div
+                className="absolute inset-0 transition-opacity duration-300"
+                style={{ opacity: view === "trace" ? 1 : 0, pointerEvents: view === "trace" ? "auto" : "none" }}
+              >
+                <BrainCanvas
+                  anchors={anchors}
+                  activeAnchorId={activeAnchorId}
+                  onHover={setHoverId}
+                  onSelect={(id) => {
+                    setSelectedId(id);
+                    setPressedAnchorId(id);
+                  }}
+                />
+              </div>
+            )}
+            {!hasError && atlasRequested && (
+              <iframe
+                src={atlasSrc}
+                onLoad={handleAtlasLoad}
+                title="Anatomical atlas"
+                className="absolute inset-0 h-full w-full border-0 transition-opacity duration-500"
+                style={{
+                  opacity: view === "atlas" ? (isAtlasSwapping ? 0.55 : isAtlasLoaded ? 1 : 0) : 0,
+                  pointerEvents: view === "atlas" ? "auto" : "none",
+                }}
+              />
+            )}
+
+            <div className="pointer-events-none absolute bottom-[18px] left-[18px] flex gap-2">
+              <LegendChip label="Cited region" tone="cited" />
+              <LegendChip label="Related region" tone="related" />
+              <LegendChip label="No corpus data" tone="none" />
+            </div>
+          </div>
+
+          <div className="border-t border-rule px-[18px] py-3">
+            <p className="font-body text-xs text-dim">Location reference from literature, not a diagnostic read.</p>
           </div>
         </div>
-        </SectionGlow>
+
+        <div className="border border-rule bg-white p-[26px]">
+          {activeAnchor ? (
+            <>
+              <p className="eyebrow">{activeAnchor.label}</p>
+              <p className="mt-2 font-body text-[13.5px] leading-relaxed text-trace-muted">{activeAnchor.blurb}</p>
+              <div className="mt-6">
+                {activeAnchor.conditions.map((c) => {
+                  const isCited = citedConditionSet.has(c.name);
+                  const tag = isCited ? "Cited" : c.rarity === "rare" ? "Rare" : "Common";
+                  return (
+                    <div key={c.name} className="border-t border-blue-200 py-3 first:border-t-0">
+                      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                        <span className="font-body text-sm font-semibold text-ink">{c.name}</span>
+                        <span
+                          className={`whitespace-nowrap rounded-[2px] px-1.5 py-0.5 font-data text-[10px] ${
+                            isCited || c.rarity === "rare"
+                              ? "border border-blue-200 bg-blue-100 text-blue-800"
+                              : "border border-rule bg-white text-dim"
+                          }`}
+                        >
+                          {tag}
+                        </span>
+                      </div>
+                      <p className="font-body text-[13px] text-trace-muted">{c.region_literature}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="eyebrow">Atlas overview</p>
+              <p className="mt-2 font-body text-[13.5px] leading-relaxed text-trace-muted">
+                Trace maps this corpus&apos;s literature-anchored presentations across cortical, subcortical, and
+                midbrain structures. Hover a region, or a condition below, to inspect its associated case literature.
+              </p>
+              <div className="mt-6">
+                <p className="eyebrow mb-2">Examples</p>
+                {conditions.slice(0, 4).map((c) => (
+                  <div key={c.name} className="border-t border-blue-200 py-2.5 first:border-t-0">
+                    <p className="font-body text-sm text-trace-muted">
+                      Try: <span className="font-semibold text-ink">{c.name}</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mt-2">
+      <div className="mt-6">
+        <RarityComparison />
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-2">
         {conditions.map((condition) => {
           const anchor = anchors.find((a) => a.conditions.some((c) => c.name === condition.name));
           const isSelected = anchor?.id === selectedId;
           return (
             <button
               key={condition.name}
+              type="button"
               onClick={() => anchor && setSelectedId(anchor.id)}
-              className={`rounded-full border px-4 py-2.5 min-h-11 text-xs transition-[color,border-color,background-color,backdrop-filter,transform] active:scale-[0.97] ${
+              className={`rounded-[2px] border px-3 py-1.5 font-body text-xs transition-colors ${
                 isSelected
-                  ? "border-rare text-rare"
-                  : "bg-void-2/40 backdrop-blur-sm border-line-bright text-mist hover:border-mist hover:text-ink"
+                  ? "border-blue-700 text-blue-700"
+                  : "border-rule bg-white text-dim hover:border-blue-300 hover:text-ink"
               }`}
             >
-              <span className="font-body">{condition.name}</span>
+              {condition.name}
             </button>
           );
         })}
       </div>
-      <p className="font-body text-xs text-mist">
-        Location reference from literature, not a diagnostic read.
-      </p>
     </section>
+  );
+}
+
+function LegendChip({ label, tone }: { label: string; tone: "cited" | "related" | "none" }) {
+  const dot =
+    tone === "cited" ? "bg-blue-600" : tone === "related" ? "bg-blue-400" : "border border-rule bg-white";
+  const chipClass =
+    tone === "cited"
+      ? "border-blue-200 bg-blue-100 text-blue-800"
+      : "border-rule bg-white text-dim";
+  return (
+    <span className={`flex items-center gap-1.5 rounded-[2px] border px-2 py-1 font-data text-[10.5px] ${chipClass}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {label}
+    </span>
   );
 }
