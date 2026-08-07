@@ -5,6 +5,7 @@ plan-v2/02-PHASE-CARD-2A-evermind-memory.md section 4.4.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from uuid import uuid4
@@ -148,7 +149,19 @@ def _aggregate_cost(calls: list[tuple[str, ChatResult]]) -> CostInfo:
     return CostInfo(total_tokens=total_tokens, cost_usd=round(total_cost, 8), by_call_site=by_call_site)
 
 
-def run_query(query: str, user_id: str, session_id: str, personalize: bool) -> QueryResult:
+def _emit(on_stage: Callable[[str, dict], None] | None, stage: str, **detail) -> None:
+    if on_stage is not None:
+        on_stage(stage, detail)
+
+
+def run_query(
+    query: str,
+    user_id: str,
+    session_id: str,
+    personalize: bool,
+    *,
+    on_stage: Callable[[str, dict], None] | None = None,
+) -> QueryResult:
     request_id = str(uuid4())
     services = get_services()
     llm = _RecordingLLM(services.llm)
@@ -161,6 +174,7 @@ def run_query(query: str, user_id: str, session_id: str, personalize: bool) -> Q
 
     current_query = query
     hyde_query = run_hyde(llm, current_query, request_id=request_id, session_id=session_id, user_id=user_id)
+    _emit(on_stage, "hyde_expand", iteration=1)
 
     trace: list[LoopTraceEntry] = []
     reranked: list[ScoredPaper] = []
@@ -178,10 +192,12 @@ def run_query(query: str, user_id: str, session_id: str, personalize: bool) -> Q
         else:
             reranked, demoted = raw_results, 0
         total_demoted += demoted
+        _emit(on_stage, "retrieval", iteration=round_idx)
 
         verdict = run_relevance_check(
             llm, current_query, reranked, request_id=request_id, session_id=session_id, user_id=user_id
         )
+        _emit(on_stage, "relevance_check", iteration=round_idx)
         trace.append(LoopTraceEntry(
             iteration=round_idx,
             retrieved_pmids=[sp.paper.pmid for sp in reranked],
@@ -198,7 +214,9 @@ def run_query(query: str, user_id: str, session_id: str, personalize: bool) -> Q
         current_query = run_refine(
             llm, current_query, verdict["note"], request_id=request_id, session_id=session_id, user_id=user_id
         )
+        _emit(on_stage, "refine_query", iteration=round_idx)
         hyde_query = run_hyde(llm, current_query, request_id=request_id, session_id=session_id, user_id=user_id)
+        _emit(on_stage, "hyde_expand", iteration=round_idx + 1)
 
     top_papers = reranked[:SUMMARY_TOP_N]
 
@@ -208,10 +226,12 @@ def run_query(query: str, user_id: str, session_id: str, personalize: bool) -> Q
         distilled_context=distilled_context,
         request_id=request_id, session_id=session_id, user_id=user_id,
     )
+    _emit(on_stage, "summarize")
     citations = check_citations(
         llm, query, summary.markdown, top_papers, summary.citations,
         request_id=request_id, session_id=session_id, user_id=user_id,
     )
+    _emit(on_stage, "citation_check")
 
     if personalize:
         matched_conditions = sorted({sp.paper.condition for sp in top_papers})

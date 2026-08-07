@@ -103,19 +103,25 @@ def query(request: Request, payload: QueryRequest) -> QueryResponse:
 @router.post("/query/stream")
 @limiter.limit("10/minute")
 def query_stream(request: Request, payload: QueryRequest) -> StreamingResponse:
-    """Runs the same pipeline as POST /query but over SSE, emitting a single
-    `done` event with the full result. run_query has no stage-by-stage hooks
-    (v1's on_stage instrumentation was dropped with llm_client.py), so this is
-    a thin wrapper, not a progress stream - kept for endpoint parity since
-    the frozen HTTP contract in plan-v2/00-SHARED-CONTRACTS.md section 4 does
-    not define stage events for this route.
+    """Runs the same pipeline as POST /query but over SSE, emitting `stage`
+    events as the search loop progresses (hyde_expand, retrieval,
+    relevance_check, refine_query, summarize, citation_check - the same
+    stage names v1 used) followed by one `done` event with the full result.
+    The frozen HTTP contract in plan-v2/00-SHARED-CONTRACTS.md section 4
+    doesn't define this route's event shape, so it's ours to choose; matching
+    v1's stage names is what frontend/src/components/progress-timeline.tsx
+    already expects.
     """
     event_queue: queue.Queue = queue.Queue()
+
+    def on_stage(stage: str, detail: dict) -> None:
+        event_queue.put({"type": "stage", "stage": stage, **detail})
 
     def worker() -> None:
         try:
             result = _to_response(run_query(
-                payload.query, payload.user_id, payload.session_id, payload.personalize
+                payload.query, payload.user_id, payload.session_id, payload.personalize,
+                on_stage=on_stage,
             ))
             event_queue.put({"type": "done", "result": result.model_dump()})
         except Exception:

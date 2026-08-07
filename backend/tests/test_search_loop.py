@@ -61,12 +61,22 @@ def test_low_confidence_round_triggers_refine_and_retries(monkeypatch):
     services = Services(retrieval=retrieval, llm=llm, memory=FakeMemory(), ledger=_NoOpLedger())
     monkeypatch.setattr("backend.app.pipeline.get_services", lambda: services)
 
-    result = run_query("original query", user_id="u1", session_id="s1", personalize=False)
+    stages: list[tuple[str, dict]] = []
+    result = run_query(
+        "original query", user_id="u1", session_id="s1", personalize=False,
+        on_stage=lambda stage, detail: stages.append((stage, detail)),
+    )
 
     assert retrieval.queries_seen == ["original query", "refined query"]
     assert [t.relevant for t in result.trace] == [False, True]
     assert len(result.trace) == 2
     assert [p.paper.pmid for p in result.papers] == ["p2", "p3"]
+
+    assert [s for s, _ in stages] == [
+        "hyde_expand", "retrieval", "relevance_check", "refine_query",
+        "hyde_expand", "retrieval", "relevance_check", "summarize", "citation_check",
+    ]
+    assert [detail["iteration"] for stage, detail in stages if stage == "hyde_expand"] == [1, 2]
 
 
 def test_relevant_first_round_stops_the_loop(monkeypatch):
