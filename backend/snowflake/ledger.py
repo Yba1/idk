@@ -129,6 +129,16 @@ class SnowflakeLedger:
                 break
             self._write_rows(batch)
 
+    def stop(self) -> None:
+        """Test/shutdown hook: stop the background flush thread after
+        flushing whatever remains, without waiting for process atexit.
+        Idempotent — safe to call more than once (e.g. once explicitly and
+        once again via the atexit handler at process exit).
+        """
+        self._atexit_flush()
+        if self._thread.is_alive():
+            self._thread.join(timeout=5)
+
     def health(self) -> dict:
         with self._lock:
             dropped = self._dropped
