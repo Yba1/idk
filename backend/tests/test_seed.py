@@ -12,4 +12,7 @@ def test_run_seed_demo_returns_a_populated_result(monkeypatch):
     assert set(result.keys()) == {
         "request_id", "summary_markdown", "citations", "papers", "trace",
         "region", "memory", "cost",
+        # Additive, optional, null unless a retrieval policy was requested --
+        # see Decisions.md, "POST /query gains an optional policy".
+        "policy",
     }

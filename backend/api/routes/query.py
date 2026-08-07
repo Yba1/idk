@@ -17,12 +17,14 @@ from backend.api.schemas import (
     CostOut,
     MemoryOut,
     PaperOut,
+    PolicyOut,
     QueryRequest,
     QueryResponse,
     ScoredPaperOut,
     TraceRoundOut,
 )
 from backend.app.pipeline import QueryResult, run_query
+from backend.app.retrieval.policy import policy_for_label
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -91,6 +93,25 @@ def _to_response(result: QueryResult) -> QueryResponse:
                 for site, c in result.cost.by_call_site.items()
             },
         ),
+        policy=_policy_out(result),
+    )
+
+
+def _policy_out(result: QueryResult) -> PolicyOut | None:
+    p = result.policy
+    if p is None:
+        return None
+    before, after = p.prompt_tokens_before_compression, p.prompt_tokens_after_compression
+    saved = max(0, before - after)
+    return PolicyOut(
+        label=p.label,
+        top_k=p.top_k,
+        compress_top_n=p.compress_top_n,
+        papers_in_prompt=p.papers_in_prompt,
+        prompt_tokens_before_compression=before,
+        prompt_tokens_after_compression=after,
+        tokens_saved=saved,
+        reduction_pct=round(100.0 * saved / before, 2) if before else 0.0,
     )
 
 
@@ -104,7 +125,10 @@ def _request_scoped_ids(request: Request) -> tuple[str, str, str]:
 @router.post("/query", response_model=QueryResponse)
 @limiter.limit("10/minute")
 def query(request: Request, payload: QueryRequest) -> QueryResponse:
-    result = run_query(payload.query, payload.user_id, payload.session_id, payload.personalize)
+    result = run_query(
+        payload.query, payload.user_id, payload.session_id, payload.personalize,
+        policy=policy_for_label(payload.policy) if payload.policy else None,
+    )
     return _to_response(result)
 
 
@@ -130,6 +154,7 @@ def query_stream(request: Request, payload: QueryRequest) -> StreamingResponse:
             result = _to_response(run_query(
                 payload.query, payload.user_id, payload.session_id, payload.personalize,
                 on_stage=on_stage,
+                policy=policy_for_label(payload.policy) if payload.policy else None,
             ))
             event_queue.put({"type": "done", "result": result.model_dump()})
         except Exception:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -13,6 +13,24 @@ class QueryRequest(BaseModel):
     session_id: str
     user_id: str
     personalize: bool = False
+
+    # Retrieval policy by label ("tight" | "generous"), per
+    # backend/app/retrieval/policy.py. Omitted/null keeps today's exact
+    # behaviour (RETRIEVAL_TOP_K papers, no compression), so every existing
+    # caller is unaffected. An unknown label is a 422, never a silent
+    # fallback -- a demo that quietly runs the wrong arm is worse than one
+    # that errors.
+    policy: str | None = None
+
+    @field_validator("policy")
+    @classmethod
+    def _known_policy(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        from backend.app.retrieval.policy import policy_for_label
+
+        policy_for_label(v)  # raises ValueError -> 422
+        return v
 
 
 class PaperOut(CamelModel):
@@ -76,6 +94,20 @@ class CostOut(BaseModel):
     by_call_site: dict[str, CallSiteCostOut]
 
 
+class PolicyOut(CamelModel):
+    """Which retrieval policy ran and what it cost the prompt. Null when the
+    request didn't ask for one (today's default path)."""
+
+    label: str
+    top_k: int
+    compress_top_n: int
+    papers_in_prompt: int
+    prompt_tokens_before_compression: int
+    prompt_tokens_after_compression: int
+    tokens_saved: int
+    reduction_pct: float
+
+
 class QueryResponse(BaseModel):
     request_id: str
     summary_markdown: str
@@ -85,6 +117,7 @@ class QueryResponse(BaseModel):
     region: BrainRegionOut | None
     memory: MemoryOut
     cost: CostOut
+    policy: PolicyOut | None = None
 
 
 class ContrastPaperOut(BaseModel):

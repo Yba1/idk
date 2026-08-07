@@ -161,3 +161,50 @@ one line in `economics_summary()`'s two return statements.
 wiring, and is the other party to the section 4 HTTP contract) and Card 2B
 (consumes this shape via generated `api-types.ts`) sign-off before this
 lands, per the section 4 rule above. Not resolved by Card 1 in this pass.
+
+## POST /query gains an optional `policy` — additive, logged per section 4
+
+**Decided 2026-08-07.** `plan-v2/00-SHARED-CONTRACTS.md` section 4 freezes the
+`POST /query` shape and requires shape changes to be logged here rather than
+made silently mid-build. This is that log entry.
+
+**What changed, exactly:**
+
+```
+POST /query
+  req  { ..., policy?: "tight" | "generous" | null }     # NEW, optional
+  res  { ..., policy: PolicyOut | null }                 # NEW, null by default
+```
+
+```
+PolicyOut = { label, topK, compressTopN, papersInPrompt,
+              promptTokensBeforeCompression, promptTokensAfterCompression,
+              tokensSaved, reductionPct }
+```
+
+**Why this is safe to land without a joint checkpoint,** unlike the
+`/economics/summary` `cache` field logged above:
+
+1. **Both halves are additive and optional.** Omitting `policy` from the
+   request yields byte-identical behaviour to before — `pipeline.run_query`'s
+   `policy` kwarg defaults to `None`, which is the pre-existing code path
+   (`RETRIEVAL_TOP_K` papers, no compression). The response field is `null`.
+   Pinned by `test_api_query.py`'s contract-shape test, which now asserts
+   `body["policy"] is None` for an unrequested policy.
+2. **No existing consumer breaks.** Card 2B generates `api-types.ts` from
+   `/openapi.json` (`npm run types:gen`), so re-running that picks the field up
+   as optional. A consumer that never regenerates simply ignores an extra
+   nullable key.
+3. **An unknown label is a 422, not a fallback.** `QueryRequest`'s validator
+   calls `policy_for_label()`, which raises on an unknown name. A demo that
+   quietly runs the wrong arm is worse than one that errors.
+
+**Why it exists:** it is the API surface for the breadth/depth trade measured
+in `backend/measurement/results/policy_bench.md` — rare-condition recall
+0.4118 -> 0.7475 (+81.5%) at −0.34% cost, by retrieving 3x the papers and
+compressing each to one sentence. Without a request-level toggle the result is
+a number in a JSON file; with it, the two arms can be run live side by side.
+
+**Not decided here:** whether `GENEROUS` should become the default. That needs
+a live citation-checked run — the bench calls no LLM and so measures what
+reaches the prompt, not answer quality. Opt-in until that exists.

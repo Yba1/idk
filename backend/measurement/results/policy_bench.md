@@ -56,6 +56,30 @@ a further +0.06 rare recall for **+31% tokens**. `GENEROUS` is the widest
 setting still at or under `TIGHT`'s budget, which is the only reason the recall
 gain can be called free.
 
+## Running the two arms live
+
+`POST /query` (and `/query/stream`) takes an optional `policy` label. Omit it
+for today's behaviour; pass `"tight"` or `"generous"` to run an arm and get back
+what it did. Unknown labels are a 422, never a silent fallback.
+
+```jsonc
+// POST /query  { "query": "...", "session_id": "s", "user_id": "u",
+//                "policy": "generous" }
+"policy": {
+  "label": "generous", "topK": 30, "compressTopN": 1, "papersInPrompt": 30,
+  "promptTokensBeforeCompression": 7226, "promptTokensAfterCompression": 1578,
+  "tokensSaved": 5648, "reductionPct": 78.16
+}
+```
+
+Same query on the other arm — `"policy": "tight"` — gives 10 papers in **1,680**
+tokens. So on a single live request: **3× the papers, 6% fewer tokens.** That is
+the gold-set result reproducing per-request, and it is the 30-second demo.
+
+Contract note: both the request and response fields are additive and optional,
+logged in `Decisions.md` per `plan-v2/00-SHARED-CONTRACTS.md` §4. Nothing changes
+for a caller that doesn't pass `policy`.
+
 ## On the recall denominator
 
 `run_gate.py` reports recall@10 with `denom = min(10, total_relevant)`. That

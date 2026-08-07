@@ -25,7 +25,11 @@ def test_query_endpoint_returns_the_v2_contract_shape(monkeypatch):
     assert set(body.keys()) == {
         "request_id", "summary_markdown", "citations", "papers", "trace",
         "region", "memory", "cost",
+        # Additive, optional, null unless the request asks for a retrieval
+        # policy -- see Decisions.md, "POST /query gains an optional policy".
+        "policy",
     }
+    assert body["policy"] is None, "policy must stay null when unrequested"
     assert body["request_id"]
     assert isinstance(body["papers"], list) and len(body["papers"]) > 0
     assert set(body["memory"].keys()) == {"applied", "seen_filtered", "profile_used", "distilled_context"}

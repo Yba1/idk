@@ -61,6 +61,24 @@ class BrainRegionInfo:
 
 
 @dataclass
+class PolicyInfo:
+    """What retrieval policy actually ran, and what it did to the prompt.
+
+    Reported so a caller can see the breadth/depth trade it opted into rather
+    than having to trust it happened. `prompt_tokens_before/after_compression`
+    are measured on this request's own abstracts by the real compressor, not
+    carried over from the gold-set bench.
+    """
+
+    label: str
+    top_k: int
+    compress_top_n: int
+    papers_in_prompt: int
+    prompt_tokens_before_compression: int
+    prompt_tokens_after_compression: int
+
+
+@dataclass
 class QueryResult:
     request_id: str
     summary_markdown: str
@@ -70,6 +88,7 @@ class QueryResult:
     region: BrainRegionInfo | None
     memory: MemoryInfo
     cost: CostInfo
+    policy: PolicyInfo | None = None
 
 
 class _RecordingLLM:
@@ -270,8 +289,19 @@ def run_query(
     # what goes to check_citations and into the response, so claims are still
     # verified against, and the user still reads, the real abstract.
     summary_papers = top_papers
+    policy_info: PolicyInfo | None = None
     if policy:
-        summary_papers, _, _ = _compress_for_policy(query, top_papers, policy, hyde_query)
+        summary_papers, tokens_before, tokens_after = _compress_for_policy(
+            query, top_papers, policy, hyde_query
+        )
+        policy_info = PolicyInfo(
+            label=policy.label,
+            top_k=policy.top_k,
+            compress_top_n=policy.compress_top_n,
+            papers_in_prompt=len(summary_papers),
+            prompt_tokens_before_compression=tokens_before,
+            prompt_tokens_after_compression=tokens_after,
+        )
 
     distilled_context = profile.distilled_context if memory_applied else ""
     summary = generate_sourced_summary(
@@ -313,4 +343,5 @@ def run_query(
             distilled_context=distilled_context,
         ),
         cost=_aggregate_cost(llm.calls),
+        policy=policy_info,
     )
