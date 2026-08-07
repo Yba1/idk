@@ -5,7 +5,8 @@ matches literature far better than a short symptom description does.
 """
 from __future__ import annotations
 
-from backend.app.llm_client import ChatResult, ParitokLLMClient
+from backend.contracts.models import ChatResult
+from backend.contracts.ports import LLMPort
 
 
 def build_hyde_prompt(query: str) -> list[dict]:
@@ -19,5 +20,13 @@ def build_hyde_prompt(query: str) -> list[dict]:
     ]
 
 
-def run_hyde(client: ParitokLLMClient, query: str, *, direct: bool = False) -> ChatResult:
-    return client.chat(build_hyde_prompt(query), direct=direct)
+def run_hyde(
+    client: LLMPort, query: str, *, request_id: str, session_id: str, user_id: str
+) -> ChatResult:
+    return client.chat(
+        build_hyde_prompt(query),
+        call_site="hyde",
+        request_id=request_id,
+        session_id=session_id,
+        user_id=user_id,
+    )

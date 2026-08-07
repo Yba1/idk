@@ -24,6 +24,11 @@ _SEMANTIC_MODEL_STAGE = os.environ.get(
     "SNOWFLAKE_SEMANTIC_MODEL_STAGE",
     "@NEULIT.CORE.SEMANTIC_MODELS/semantic_model.yaml",
 )
+_DEFAULT_MODEL = "claude-sonnet-4-5"
+
+
+def _active_model() -> str:
+    return os.environ.get("SNOWFLAKE_CORTEX_MODEL", _DEFAULT_MODEL)
 _UNAVAILABLE = {
     "answer": "Cortex Analyst is unavailable (no Snowflake connection or the request failed).",
     "sql": "",
@@ -55,12 +60,12 @@ class CortexAnalyst:
             # generated SQL statement to run.
             result = session.sql(
                 "SELECT SNOWFLAKE.CORTEX.COMPLETE("
-                "'claude-3-5-sonnet', "
+                "?, "
                 "OBJECT_CONSTRUCT("
                 "  'semantic_model_file', ?, "
                 "  'messages', ARRAY_CONSTRUCT(OBJECT_CONSTRUCT('role', 'user', 'content', ?))"
                 ")) AS RESP",
-                params=[self._semantic_model_stage, question],
+                params=[_active_model(), self._semantic_model_stage, question],
             ).collect()
             if not result:
                 return dict(_UNAVAILABLE)

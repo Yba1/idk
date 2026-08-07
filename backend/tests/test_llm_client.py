@@ -19,9 +19,12 @@ from backend.snowflake import llm as llm_module
 from backend.snowflake.llm import CortexLLMClient
 
 
-def test_model_defaults_to_claude_3_5_sonnet(monkeypatch):
+def test_model_defaults_to_claude_sonnet_4_5(monkeypatch):
+    # claude-3-5-sonnet is unavailable on COMPLETE in this account's Cortex
+    # region (confirmed live, see Decisions.md); claude-sonnet-4-5 is the
+    # substitute per the documented contingency.
     monkeypatch.delenv("SNOWFLAKE_CORTEX_MODEL", raising=False)
-    assert llm_module._active_model() == "claude-3-5-sonnet"
+    assert llm_module._active_model() == "claude-sonnet-4-5"
 
 
 def test_model_reads_env_override(monkeypatch):

@@ -7,7 +7,8 @@ import json
 import re
 from collections.abc import Callable
 
-from backend.app.llm_client import ParitokLLMClient
+from backend.app.llm.json_repair import try_parse_json
+from backend.contracts.ports import LLMPort
 
 
 CITATION_CHECK_SYSTEM_PROMPT = (
@@ -52,11 +53,14 @@ def split_cited_sentences(raw_text: str) -> list[dict]:
 
 
 def check_citations(
-    client: ParitokLLMClient,
+    client: LLMPort,
     query: str,
     raw_text: str,
     papers: list[dict],
     *,
+    request_id: str,
+    session_id: str,
+    user_id: str,
     on_stage: Callable[[str, dict], None] | None = None,
 ) -> list[dict]:
     """Verify each cited claim in raw_text against its source paper's abstract.
@@ -140,8 +144,10 @@ For each, determine if the abstract supports the claim. Return ONLY valid JSON."
         on_stage("citation_check", {})
     result = client.chat(
         messages,
-        response_format={"type": "json_object"},
-        direct=True,
+        call_site="citation_check",
+        request_id=request_id,
+        session_id=session_id,
+        user_id=user_id,
     )
 
     # Step 6 & 7: Handle degraded call or JSON parsing errors
@@ -157,8 +163,8 @@ For each, determine if the abstract supports the claim. Return ONLY valid JSON."
         ]
     else:
         judge_results = []
+        parsed = try_parse_json(result.content)
         try:
-            parsed = json.loads(result.content)
             results_list = parsed.get("results", [])
 
             # Map each judge result back to the corresponding (sentence, marker) pair
@@ -182,7 +188,7 @@ For each, determine if the abstract supports the claim. Return ONLY valid JSON."
                         "status": judge_item.get("status", "unverified"),
                         "reason": judge_item.get("reason", "No reason provided.")
                     })
-        except (json.JSONDecodeError, TypeError):
+        except (AttributeError, TypeError):
             # JSON parsing failed -> all pairs in this batch get unverified
             judge_results = [
                 {
@@ -200,10 +206,13 @@ For each, determine if the abstract supports the claim. Return ONLY valid JSON."
 
 
 def check_differential(
-    client: ParitokLLMClient,
+    client: LLMPort,
     papers: list[dict],
     differential_candidates: list[dict],
     *,
+    request_id: str,
+    session_id: str,
+    user_id: str,
     on_stage: Callable[[str, dict], None] | None = None,
 ) -> list[dict]:
     """Verify each differential candidate's marker against its cited abstract.
@@ -250,19 +259,25 @@ For each, determine if the abstract genuinely supports this condition as a plaus
 
     if on_stage:
         on_stage("citation_check", {})
-    result = client.chat(messages, response_format={"type": "json_object"}, direct=True)
+    result = client.chat(
+        messages,
+        call_site="citation_check",
+        request_id=request_id,
+        session_id=session_id,
+        user_id=user_id,
+    )
 
     if result.degraded:
         return []
 
+    parsed = try_parse_json(result.content)
     try:
-        parsed = json.loads(result.content)
         results_list = parsed.get("results", [])
         judge_dict = {
             (item.get("condition_name"), item.get("marker")): item
             for item in results_list
         }
-    except (json.JSONDecodeError, TypeError, AttributeError):
+    except (TypeError, AttributeError):
         return []
 
     verified = []
