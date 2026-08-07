@@ -1,134 +1,81 @@
-from unittest.mock import MagicMock
-from backend.app.llm_client import ChatResult
+import json
+
 from backend.app.summary.generate import generate_sourced_summary
-
-PAPERS = [
-    {"pmid": "111", "title": "Scalp angiosarcoma case report", "abstract": "Focal FDG uptake noted."},
-    {"pmid": "222", "title": "Second scalp lesion report", "abstract": "Rare vascular tumor imaging findings."},
-]
+from backend.tests._stub_llm import StubLLM, make_scored_paper
 
 
-def test_generate_sourced_summary_returns_text_and_citations():
-    fake_client = MagicMock()
-    fake_client.chat.return_value = ChatResult(
-        content='{"summary": "The lesion shows focal FDG uptake [1], consistent with vascular tumor findings [2].", "imaging_findings": null, "teaching_point": null, "differential": []}',
-        prompt_tokens=300, completion_tokens=40, total_tokens=340)
-
-    summary = generate_sourced_summary(fake_client, "scalp lesion PET findings", PAPERS)
-
-    assert "[1]" in summary.text
-    assert len(summary.citations) == 2
-    assert summary.citations[0] == {"marker": "[1]", "pmid": "111", "title": "Scalp angiosarcoma case report"}
-    assert summary.degraded is False
-
-
-def test_generate_sourced_summary_marks_degraded_on_failure():
-    fake_client = MagicMock()
-    fake_client.chat.return_value = ChatResult(
-        content="", prompt_tokens=0, completion_tokens=0, total_tokens=0, degraded=True, error="timeout")
-
-    summary = generate_sourced_summary(fake_client, "query", PAPERS)
-
-    assert summary.degraded is True
-    assert summary.text == ""
-
-
-def test_generate_sourced_summary_handles_empty_paper_list():
-    fake_client = MagicMock()
-
-    summary = generate_sourced_summary(fake_client, "query", [])
-
-    assert summary.text == ""
+def test_no_papers_returns_empty_summary_without_a_call():
+    llm = StubLLM({"summary": json.dumps({"summary_markdown": "should not be used"})})
+    summary = generate_sourced_summary(llm, "query", [], request_id="r1", session_id="s1", user_id="u1")
+    assert summary.markdown == ""
     assert summary.citations == []
     assert summary.degraded is False
-    fake_client.chat.assert_not_called()
+    assert llm.calls == []
 
 
-def test_generate_sourced_summary_citation_markers_beyond_nine():
-    fake_client = MagicMock()
-    fake_client.chat.return_value = ChatResult(
-        content='{"summary": "Findings summarized across all sources.", "imaging_findings": null, "teaching_point": null, "differential": []}',
-        prompt_tokens=500, completion_tokens=40, total_tokens=540)
-    many_papers = [{"pmid": str(i), "title": f"Paper {i}", "abstract": "abstract"} for i in range(12)]
+def test_extracts_citations_from_bracket_markers_in_order():
+    papers = [make_scored_paper("p1"), make_scored_paper("p2")]
+    llm = StubLLM({"summary": json.dumps({
+        "summary_markdown": "First finding [1]. Second finding [2]. Repeat of first [1]."
+    })})
 
-    summary = generate_sourced_summary(fake_client, "query", many_papers)
+    summary = generate_sourced_summary(llm, "query", papers, request_id="r1", session_id="s1", user_id="u1")
 
-    assert summary.citations[9] == {"marker": "[10]", "pmid": "9", "title": "Paper 9"}
-    assert summary.citations[11] == {"marker": "[12]", "pmid": "11", "title": "Paper 11"}
-
-
-def test_generate_sourced_summary_prepends_disclaimer_when_low_confidence():
-    fake_client = MagicMock()
-    fake_client.chat.return_value = ChatResult(
-        content='{"summary": "The lesion shows focal FDG uptake [1].", "imaging_findings": null, "teaching_point": null, "differential": []}',
-        prompt_tokens=300, completion_tokens=40, total_tokens=340)
-
-    summary = generate_sourced_summary(fake_client, "query", PAPERS, low_confidence=True)
-
-    assert summary.text.startswith("Note:")
-    assert "The lesion shows focal FDG uptake [1]." in summary.text
+    assert summary.degraded is False
+    assert [c.index for c in summary.citations] == [1, 2]
+    assert [c.pmid for c in summary.citations] == ["p1", "p2"]
+    assert all(c.supported is None for c in summary.citations)
 
 
-def test_generate_sourced_summary_no_disclaimer_by_default():
-    fake_client = MagicMock()
-    fake_client.chat.return_value = ChatResult(
-        content='{"summary": "The lesion shows focal FDG uptake [1].", "imaging_findings": null, "teaching_point": null, "differential": []}',
-        prompt_tokens=300, completion_tokens=40, total_tokens=340)
+def test_out_of_range_markers_are_ignored():
+    papers = [make_scored_paper("p1")]
+    llm = StubLLM({"summary": json.dumps({"summary_markdown": "Claim [1] and a bad one [9]."})})
 
-    summary = generate_sourced_summary(fake_client, "query", PAPERS)
+    summary = generate_sourced_summary(llm, "query", papers, request_id="r1", session_id="s1", user_id="u1")
 
-    assert summary.text == "The lesion shows focal FDG uptake [1]."
+    assert [c.index for c in summary.citations] == [1]
 
 
-def test_generate_sourced_summary_returns_degraded_on_malformed_json():
-    """A ChatResult with invalid JSON should mark degraded=True."""
-    fake_client = MagicMock()
-    fake_client.chat.return_value = ChatResult(
-        content="not valid json",
-        prompt_tokens=300, completion_tokens=40, total_tokens=340)
+def test_degraded_call_returns_degraded_summary():
+    papers = [make_scored_paper("p1")]
+    llm = StubLLM({}, degraded_sites={"summary"})
 
-    summary = generate_sourced_summary(fake_client, "query", PAPERS)
+    summary = generate_sourced_summary(llm, "query", papers, request_id="r1", session_id="s1", user_id="u1")
 
     assert summary.degraded is True
-    assert summary.text == ""
+    assert summary.markdown == ""
+    assert summary.citations == []
 
 
-def test_generate_sourced_summary_returns_degraded_on_missing_summary_key():
-    """A ChatResult with valid JSON but missing 'summary' key should mark degraded=True."""
-    fake_client = MagicMock()
-    fake_client.chat.return_value = ChatResult(
-        content='{"foo": "bar"}',
-        prompt_tokens=300, completion_tokens=40, total_tokens=340)
+def test_missing_summary_markdown_key_is_treated_as_degraded():
+    papers = [make_scored_paper("p1")]
+    llm = StubLLM({"summary": json.dumps({"not_the_right_key": "oops"})})
 
-    summary = generate_sourced_summary(fake_client, "query", PAPERS)
+    summary = generate_sourced_summary(llm, "query", papers, request_id="r1", session_id="s1", user_id="u1")
 
     assert summary.degraded is True
-    assert summary.text == ""
 
 
-def test_generate_sourced_summary_populates_imaging_findings_teaching_point_and_differential():
-    """Test that imaging_findings, teaching_point, and differential_candidates are populated from JSON."""
-    fake_client = MagicMock()
-    fake_client.chat.return_value = ChatResult(
-        content='{"summary": "Findings [1].", "imaging_findings": "Occipital hypometabolism.", "teaching_point": "Consider CJD.", "differential": [{"condition_name": "Alzheimer disease", "marker": "[1]"}]}',
-        prompt_tokens=300, completion_tokens=40, total_tokens=340)
+def test_distilled_context_is_injected_as_a_system_message():
+    papers = [make_scored_paper("p1")]
+    llm = StubLLM({"summary": json.dumps({"summary_markdown": "Findings [1]."})})
 
-    summary = generate_sourced_summary(fake_client, "query", PAPERS)
+    generate_sourced_summary(
+        llm, "query", papers, distilled_context="neuroradiology resident, explored 3 conditions",
+        request_id="r1", session_id="s1", user_id="u1",
+    )
 
-    assert summary.imaging_findings == "Occipital hypometabolism."
-    assert summary.teaching_point == "Consider CJD."
-    assert summary.differential_candidates == [{"condition_name": "Alzheimer disease", "marker": "[1]"}]
-    assert summary.degraded is False
+    call_site, messages = llm.calls[0]
+    assert call_site == "summary"
+    assert any("neuroradiology resident" in m.content for m in messages)
+    assert any("Do not mention this description" in m.content for m in messages)
 
 
-def test_generate_sourced_summary_drops_malformed_differential_items():
-    """Test that malformed differential items are dropped while valid siblings survive."""
-    fake_client = MagicMock()
-    fake_client.chat.return_value = ChatResult(
-        content='{"summary": "Findings [1].", "imaging_findings": null, "teaching_point": null, "differential": [{"condition_name": "Bad"}, {"condition_name": "Good", "marker": "[1]"}]}',
-        prompt_tokens=300, completion_tokens=40, total_tokens=340)
+def test_no_distilled_context_means_no_extra_system_message():
+    papers = [make_scored_paper("p1")]
+    llm = StubLLM({"summary": json.dumps({"summary_markdown": "Findings [1]."})})
 
-    summary = generate_sourced_summary(fake_client, "query", PAPERS)
+    generate_sourced_summary(llm, "query", papers, request_id="r1", session_id="s1", user_id="u1")
 
-    assert summary.differential_candidates == [{"condition_name": "Good", "marker": "[1]"}]
-    assert summary.degraded is False
+    _, messages = llm.calls[0]
+    assert not any("reader is described as" in m.content for m in messages)

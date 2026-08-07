@@ -1,141 +1,118 @@
-from unittest.mock import MagicMock
-from backend.app.llm_client import ChatResult
-from backend.app.retrieval.hybrid import HybridRetriever
-from backend.app.loop.refine import run_search_loop
+"""The search loop itself now lives inside backend/app/pipeline.py (v1's
+standalone run_search_loop was folded into the orchestrator); these tests
+drive it through run_query with a stub retrieval/LLM to check the round/
+refine mechanics rather than the full HTTP response shape.
+"""
+import json
 
-PAPERS = [
-    {"pmid": "1", "title": "Scalp angiosarcoma PET case report", "abstract": "Rare vascular tumor, focal FDG uptake.", "rarity": "rare", "condition": "Scalp angiosarcoma"},
-    {"pmid": "2", "title": "Common dementia PET study", "abstract": "Typical bilateral hypometabolism pattern.", "rarity": "common", "condition": "Dementia with Lewy bodies"},
-    {"pmid": "3", "title": "Another angiosarcoma study", "abstract": "Cutaneous angiosarcoma imaging.", "rarity": "rare", "condition": "Scalp angiosarcoma"},
-    {"pmid": "4", "title": "Parkinson's disease PET", "abstract": "Basal ganglia findings in Parkinson's.", "rarity": "common", "condition": "Parkinson's disease motor form later stage"},
-    {"pmid": "5", "title": "PSP findings", "abstract": "Progressive supranuclear palsy midbrain involvement.", "rarity": "rare", "condition": "Progressive supranuclear palsy"},
-]
-
-
-def test_loop_passes_both_raw_and_hyde_queries_to_retriever():
-    """Test that the loop passes both current_query and hyde_result.content to search()."""
-    retriever = HybridRetriever(PAPERS)
-    fake_client = MagicMock()
-    # Mock returns: HyDE expansion, batch relevance check result
-    fake_client.chat.side_effect = [
-        ChatResult(content="hypothetical case: rare scalp tumor", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        # Batch relevance check: pmid-keyed results, at least 2 relevant
-        ChatResult(
-            content='{"results": [{"pmid": "1", "relevant": true, "confidence": 0.9}, {"pmid": "2", "relevant": true, "confidence": 0.7}]}',
-            prompt_tokens=10, completion_tokens=5, total_tokens=15
-        ),
-    ]
-
-    papers, trace = run_search_loop(fake_client, retriever, "scalp tumor uptake", max_iterations=2)
-
-    # Check that retriever.search was called (indirectly through papers being returned)
-    assert len(papers) > 0
-    assert len(trace) == 1
+from backend.app.pipeline import run_query
+from backend.contracts.fakes import FakeMemory
+from backend.contracts.models import ScoredPaper
+from backend.contracts.registry import Services
+from backend.tests._stub_llm import StubLLM, make_scored_paper
 
 
-def test_batch_relevance_check_pmid_keyed_matching():
-    """Test that batch relevance check matches results by pmid, not by position."""
-    retriever = HybridRetriever(PAPERS)
-    fake_client = MagicMock()
-    # Return batch results in different order than retrieved papers
-    fake_client.chat.side_effect = [
-        ChatResult(content="hypothetical case", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        # Return results in reverse order: pmid "5" first, then "4"
-        ChatResult(
-            content='{"results": [{"pmid": "5", "relevant": true, "confidence": 0.95}, {"pmid": "4", "relevant": true, "confidence": 0.8}]}',
-            prompt_tokens=10, completion_tokens=5, total_tokens=15
-        ),
-    ]
+class _StubRetrieval:
+    def __init__(self, by_query: dict[str, list[ScoredPaper]]):
+        self.by_query = by_query
+        self.queries_seen: list[str] = []
 
-    papers, trace = run_search_loop(fake_client, retriever, "movement disorder", max_iterations=2)
+    def search(self, query, *, secondary_query=None, top_k=10, apply_rarity=True, exclude_pmids=()):
+        self.queries_seen.append(query)
+        return self.by_query.get(query, [])
 
-    # Both papers should be in results (at least 2 passed relevance)
-    assert len(papers) >= 2
-    assert trace[0].relevant_count >= 2
+    def closest_conditions(self, query, top_n=3):
+        return []
+
+    def get_by_pmids(self, pmids):
+        return []
+
+    def health(self):
+        return {"ok": True, "detail": "stub"}
 
 
-def test_loop_requires_2_papers_minimum_to_pass_relevance():
-    """Test that the loop requires at least 2 papers to pass relevance check."""
-    retriever = HybridRetriever(PAPERS)
-    fake_client = MagicMock()
-    fake_client.chat.side_effect = [
-        ChatResult(content="hypothetical case 1", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        # Only 1 paper is relevant
-        ChatResult(
-            content='{"results": [{"pmid": "1", "relevant": true, "confidence": 0.9}]}',
-            prompt_tokens=10, completion_tokens=5, total_tokens=15
-        ),
-        ChatResult(content="refined query", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content="hypothetical case 2", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        # Now 2 papers are relevant
-        ChatResult(
-            content='{"results": [{"pmid": "1", "relevant": true, "confidence": 0.85}, {"pmid": "3", "relevant": true, "confidence": 0.8}]}',
-            prompt_tokens=10, completion_tokens=5, total_tokens=15
-        ),
-    ]
+class _NoOpLedger:
+    def record(self, event):
+        pass
 
-    papers, trace = run_search_loop(fake_client, retriever, "angiosarcoma", max_iterations=2)
-
-    # First iteration should fail (only 1 relevant)
-    assert trace[0].relevant_count == 1
-    assert trace[0].relevant is False
-
-    # Second iteration should pass (2 relevant)
-    assert trace[1].relevant_count == 2
-    assert trace[1].relevant is True
-    assert len(papers) >= 2
+    def health(self):
+        return {"ok": True, "detail": "stub"}
 
 
-def test_loop_stops_early_when_relevance_check_passes_on_first_try():
-    retriever = HybridRetriever(PAPERS)
-    fake_client = MagicMock()
-    fake_client.chat.side_effect = [
-        ChatResult(content="hypothetical case text", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content='{"results": [{"pmid": "1", "relevant": true, "confidence": 0.9}, {"pmid": "2", "relevant": true, "confidence": 0.8}]}', prompt_tokens=10, completion_tokens=5, total_tokens=15),
-    ]
-
-    papers, trace = run_search_loop(fake_client, retriever, "scalp tumor uptake", max_iterations=2)
-
-    assert len(trace) == 1
-    assert trace[0].relevant is True
-    assert len(papers) >= 2
+def _relevance_content(call_number: int) -> str:
+    if call_number == 1:
+        return json.dumps({"relevant": False, "confidence": 0.1, "note": "not enough evidence"})
+    return json.dumps({"relevant": True, "confidence": 0.9, "note": "good match"})
 
 
-def test_loop_runs_second_iteration_when_first_fails_relevance():
-    retriever = HybridRetriever(PAPERS)
-    fake_client = MagicMock()
-    fake_client.chat.side_effect = [
-        ChatResult(content="hypothetical case text 1", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content='{"results": [{"pmid": "1", "relevant": false, "confidence": 0.2}]}', prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content="refined query text", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content="hypothetical case text 2", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content='{"results": [{"pmid": "2", "relevant": true, "confidence": 0.85}, {"pmid": "3", "relevant": true, "confidence": 0.75}]}', prompt_tokens=10, completion_tokens=5, total_tokens=15),
-    ]
+def test_low_confidence_round_triggers_refine_and_retries(monkeypatch):
+    round_1_papers = [make_scored_paper("p1")]
+    round_2_papers = [make_scored_paper("p2"), make_scored_paper("p3")]
+    retrieval = _StubRetrieval({"original query": round_1_papers, "refined query": round_2_papers})
 
-    papers, trace = run_search_loop(fake_client, retriever, "vague query", max_iterations=2)
+    llm = StubLLM({
+        "hyde": json.dumps({"expanded_query": "hyde text"}),
+        "relevance_check": _relevance_content,
+        "refine": json.dumps({"refined_query": "refined query"}),
+        "summary": json.dumps({"summary_markdown": "Findings [1]."}),
+        "citation_check": json.dumps({"results": [{"index": 1, "supported": True, "note": "ok"}]}),
+    })
 
-    assert len(trace) == 2
-    assert trace[0].relevant is False
-    assert trace[1].relevant is True
+    services = Services(retrieval=retrieval, llm=llm, memory=FakeMemory(), ledger=_NoOpLedger())
+    monkeypatch.setattr("backend.app.pipeline.get_services", lambda: services)
+
+    result = run_query("original query", user_id="u1", session_id="s1", personalize=False)
+
+    assert retrieval.queries_seen == ["original query", "refined query"]
+    assert [t.relevant for t in result.trace] == [False, True]
+    assert len(result.trace) == 2
+    assert [p.paper.pmid for p in result.papers] == ["p2", "p3"]
 
 
-def test_loop_returns_no_papers_when_final_iteration_has_zero_relevant():
-    """Exhausting max_iterations with zero papers passing the relevance check
-    returns an empty list, signaling the no_match path to the caller - it never
-    falls back to the unfiltered retrieved list, which would re-cite papers the
-    relevance check just rejected."""
-    retriever = HybridRetriever(PAPERS)
-    fake_client = MagicMock()
-    fake_client.chat.side_effect = [
-        ChatResult(content="hypothetical case text 1", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content='{"results": [{"pmid": "1", "relevant": false, "confidence": 0.2}]}', prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content="refined query text", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content="hypothetical case text 2", prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ChatResult(content='{"results": [{"pmid": "2", "relevant": false, "confidence": 0.3}]}', prompt_tokens=10, completion_tokens=5, total_tokens=15),
-    ]
+def test_relevant_first_round_stops_the_loop(monkeypatch):
+    papers = [make_scored_paper("p1"), make_scored_paper("p2")]
+    retrieval = _StubRetrieval({"good query": papers})
 
-    papers, trace = run_search_loop(fake_client, retriever, "vague query", max_iterations=2)
+    llm = StubLLM({
+        "hyde": json.dumps({"expanded_query": "hyde text"}),
+        "relevance_check": json.dumps({"relevant": True, "confidence": 0.95, "note": "strong match"}),
+        "summary": json.dumps({"summary_markdown": "Findings [1] [2]."}),
+        "citation_check": json.dumps({"results": [
+            {"index": 1, "supported": True, "note": "ok"},
+            {"index": 2, "supported": True, "note": "ok"},
+        ]}),
+    })
 
-    assert len(trace) == 2
-    assert trace[-1].relevant is False
-    assert papers == []
+    services = Services(retrieval=retrieval, llm=llm, memory=FakeMemory(), ledger=_NoOpLedger())
+    monkeypatch.setattr("backend.app.pipeline.get_services", lambda: services)
+
+    result = run_query("good query", user_id="u1", session_id="s1", personalize=False)
+
+    assert retrieval.queries_seen == ["good query"]
+    assert len(result.trace) == 1
+    assert result.trace[0].relevant is True
+
+
+def test_low_confidence_on_final_round_still_returns_the_last_papers(monkeypatch):
+    # Both rounds fail relevance; the loop must still return round 2's papers
+    # rather than nothing, so the summary has something to work with.
+    round_1_papers = [make_scored_paper("p1")]
+    round_2_papers = [make_scored_paper("p2")]
+    retrieval = _StubRetrieval({"q": round_1_papers, "refined query": round_2_papers})
+
+    llm = StubLLM({
+        "hyde": json.dumps({"expanded_query": "hyde text"}),
+        "relevance_check": json.dumps({"relevant": False, "confidence": 0.2, "note": "weak"}),
+        "refine": json.dumps({"refined_query": "refined query"}),
+        "summary": json.dumps({"summary_markdown": "Best-effort findings [1]."}),
+        "citation_check": json.dumps({"results": [{"index": 1, "supported": True, "note": "ok"}]}),
+    })
+
+    services = Services(retrieval=retrieval, llm=llm, memory=FakeMemory(), ledger=_NoOpLedger())
+    monkeypatch.setattr("backend.app.pipeline.get_services", lambda: services)
+
+    result = run_query("q", user_id="u1", session_id="s1", personalize=False)
+
+    assert len(result.trace) == 2
+    assert all(t.relevant is False for t in result.trace)
+    assert [p.paper.pmid for p in result.papers] == ["p2"]
