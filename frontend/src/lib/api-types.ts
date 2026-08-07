@@ -252,6 +252,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/memex/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Memex Query
+         * @description One question, both paths, priced. Optionally books the trade.
+         */
+        post: operations["memex_query_memex_query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memex/market": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Market Book
+         * @description Wallets, trade feed, totals. What the dashboard polls.
+         */
+        get: operations["market_book_memex_market_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memex/market/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Market Reset
+         * @description Back to opening balances. The rehearsal button.
+         */
+        post: operations["market_reset_memex_market_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memex/shock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Shock
+         * @description Destroy the memory, re-price the same question, return the spike.
+         *
+         *     The forget() lands first, so the re-priced run genuinely has no profile to
+         *     lean on - the spike is measured, not asserted.
+         */
+        post: operations["shock_memex_shock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memex/scarcity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scarcity Table
+         * @description Every condition, its paper count, and its multiplier. Rarest first.
+         */
+        get: operations["scarcity_table_memex_scarcity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memex/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pricing Table
+         * @description The published rate table, so the cost claim is inspectable on stage.
+         */
+        get: operations["pricing_table_memex_pricing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memex/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Memex Health */
+        get: operations["memex_health_memex_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -418,6 +558,31 @@ export interface components {
             /** Cost Usd */
             cost_usd: number;
         };
+        /** MemexQueryRequest */
+        MemexQueryRequest: {
+            /** Query */
+            query: string;
+            /**
+             * Session Id
+             * @default demo-session
+             */
+            session_id: string;
+            /**
+             * User Id
+             * @default demo-researcher
+             */
+            user_id: string;
+            /**
+             * Personalize
+             * @default true
+             */
+            personalize: boolean;
+            /**
+             * Settle
+             * @default true
+             */
+            settle: boolean;
+        };
         /** MemoryOut */
         MemoryOut: {
             /** Applied */
@@ -448,6 +613,29 @@ export interface components {
             /** Url */
             url: string;
         };
+        /**
+         * PolicyOut
+         * @description Which retrieval policy ran and what it cost the prompt. Null when the
+         *     request didn't ask for one (today's default path).
+         */
+        PolicyOut: {
+            /** Label */
+            label: string;
+            /** Topk */
+            topK: number;
+            /** Compresstopn */
+            compressTopN: number;
+            /** Papersinprompt */
+            papersInPrompt: number;
+            /** Prompttokensbeforecompression */
+            promptTokensBeforeCompression: number;
+            /** Prompttokensaftercompression */
+            promptTokensAfterCompression: number;
+            /** Tokenssaved */
+            tokensSaved: number;
+            /** Reductionpct */
+            reductionPct: number;
+        };
         /** ProfileOut */
         ProfileOut: {
             /** User Id */
@@ -476,6 +664,8 @@ export interface components {
              * @default false
              */
             personalize: boolean;
+            /** Policy */
+            policy?: string | null;
         };
         /** QueryResponse */
         QueryResponse: {
@@ -492,6 +682,7 @@ export interface components {
             region: components["schemas"]["BrainRegionOut"] | null;
             memory: components["schemas"]["MemoryOut"];
             cost: components["schemas"]["CostOut"];
+            policy?: components["schemas"]["PolicyOut"] | null;
         };
         /** RequestCallOut */
         RequestCallOut: {
@@ -521,6 +712,21 @@ export interface components {
             rarityMultiplier: number;
             /** Memorymultiplier */
             memoryMultiplier: number;
+        };
+        /** ShockRequest */
+        ShockRequest: {
+            /** Query */
+            query: string;
+            /**
+             * Session Id
+             * @default demo-session
+             */
+            session_id: string;
+            /**
+             * User Id
+             * @default demo-researcher
+             */
+            user_id: string;
         };
         /** SpecialtyRequest */
         SpecialtyRequest: {
@@ -983,6 +1189,186 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    memex_query_memex_query_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemexQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    market_book_memex_market_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    market_reset_memex_market_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    shock_memex_shock_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scarcity_table_memex_scarcity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    pricing_table_memex_pricing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    memex_health_memex_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

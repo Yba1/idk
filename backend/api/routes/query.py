@@ -156,7 +156,15 @@ def query_stream(request: Request, payload: QueryRequest) -> StreamingResponse:
                 on_stage=on_stage,
                 policy=policy_for_label(payload.policy) if payload.policy else None,
             ))
-            event_queue.put({"type": "done", "result": result.model_dump()})
+            # by_alias=True or this diverges from POST /query. The response
+            # models are CamelModel, so `response_model` serialization on the
+            # non-streaming route emits camelCase, while a bare model_dump()
+            # here emitted snake_case -- meaning the SSE path (the one the UI
+            # actually uses) was shipping `memory_multiplier`/`is_rare` where
+            # generated api-types.ts expects `memoryMultiplier`/`isRare`.
+            # profile-panel.tsx's cold-vs-warm comparison divides by
+            # `memoryMultiplier`, so it was silently computing NaN.
+            event_queue.put({"type": "done", "result": result.model_dump(by_alias=True)})
         except Exception:
             logger.exception("Unhandled error in /query/stream pipeline")
             event_queue.put({"type": "error", "message": "Internal error while processing query."})

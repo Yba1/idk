@@ -80,6 +80,11 @@ def test_default_atlas_endpoint_returns_html(mock_load_atlas, mock_view_img):
     with patch("backend.api.routes.atlas.load_img") as mock_load_img:
         mock_img = MagicMock()
         mock_img.get_fdata.return_value = np.random.randint(0, 20, (10, 10, 10))
+        # Real 4x4, like every sibling test in this file. Without it `img.affine`
+        # is a bare MagicMock, nibabel.Nifti1Image raises "Affine should be shape
+        # 4,4", and the route falls through to its degraded HTML -- so this test
+        # was asserting the fallback, not the atlas view it names.
+        mock_img.affine = np.eye(4)
         mock_load_img.return_value = mock_img
 
         response = client.get("/atlas")

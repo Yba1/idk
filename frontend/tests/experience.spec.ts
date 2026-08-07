@@ -67,13 +67,19 @@ test("fake backend query shows the loader, papers, and request cost", async ({ p
   });
   await page.goto("/");
   await submit(page);
-  await expect(page.getByText("Waking the Snowflake warehouse")).toBeVisible();
-  await expect(page.getByText("Searching 329 papers")).toBeVisible();
-  await expect(page.getByText("Checking relevance")).toBeVisible();
-  await expect(page.getByText("Writing the sourced summary")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Citation-backed, not diagnostic." })).toBeVisible();
-  await expect(page.getByText(/This answer cost \$\d/)).toBeVisible();
-  await page.getByRole("tab", { name: "Papers" }).click();
+  // Copy below tracks the trace-light redesign: the prose loader became the
+  // terse stage rail in progress-timeline.tsx, and §03's heading changed.
+  await expect(page.getByText("Expand", { exact: true })).toBeVisible();
+  await expect(page.getByText("Retrieve", { exact: true })).toBeVisible();
+  await expect(page.getByText("Check", { exact: true })).toBeVisible();
+  await expect(page.getByText("Summarize", { exact: true })).toBeVisible();
+  // This spec deliberately delays the response 5.2s to exercise the loader,
+  // so the post-result assertions need more than the 5s default.
+  await expect(
+    page.getByRole("heading", { name: "Every sentence carries the paper it came from." }),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Answer cost")).toBeVisible();
+  await page.getByRole("tab", { name: "Papers", exact: true }).click();
   await expect(page.getByText(/^PMID \d+/).first()).toBeVisible();
 });
 
@@ -110,28 +116,31 @@ test("query citation contract state renders a source link", async ({ page }) => 
   });
   await page.goto("/");
   await submit(page);
-  await expect(page.locator('aside a[href*="pubmed.ncbi.nlm.nih.gov"]').first()).toBeVisible();
+  // The marginal-citation redesign dropped the <aside> wrapper; the Sources
+  // block is plain divs now, so scope by the heading instead of the element.
+  await expect(page.getByText("Sources", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('a[href*="pubmed.ncbi.nlm.nih.gov"]').first()).toBeVisible();
 });
 
 test("fake backend personalization off renders the neutral memory state", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("checkbox", { name: "Personalize with EverMind" }).uncheck();
+  await page.getByRole("checkbox", { name: "Personalize with memory" }).uncheck({ force: true });
   await submit(page);
   await expect(page.getByText(/This answer is unpersonalized/)).toBeVisible();
   await page.getByRole("tab", { name: "Papers" }).click();
   await expect(page.getByText("Seen before")).toHaveCount(0);
-  await expect(page.getByText(/Builds on your work/)).toHaveCount(0);
+  await expect(page.getByText(/Builds on your thread/)).toHaveCount(0);
 });
 
 test("fake backend makes the same query visibly different when memory is enabled", async ({ page }) => {
   await page.goto("/");
-  const personalize = page.getByRole("checkbox", { name: "Personalize with EverMind" });
-  await personalize.uncheck();
+  const personalize = page.getByRole("checkbox", { name: "Personalize with memory" });
+  await personalize.uncheck({ force: true });
   await submit(page);
   await page.getByRole("tab", { name: "Papers" }).click();
   const coldPmids = await page.getByText(/^PMID \d+/).allTextContents();
 
-  await personalize.check();
+  await personalize.check({ force: true });
   await submit(page);
   await page.getByRole("tab", { name: "Papers" }).click();
   const warmPmids = await page.getByText(/^PMID \d+/).allTextContents();
@@ -153,13 +162,18 @@ test("seen-paper filtering banner renders for the contract state", async ({ page
   await expect(page.getByText("2 papers you've already read were filtered out.")).toBeVisible();
 });
 
-test("economy route renders four panels and the zero-ledger state", async ({ page }) => {
-  await page.goto("/economy");
-  await expect(page.getByRole("heading", { name: "What this agent actually costs" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Where the money goes" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Tokens and USD by hour" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Cortex Analyst" })).toBeVisible();
-  await expect(page.getByText("Ledger not yet reporting.")).toBeVisible();
+test("cost route renders four panels and the zero-ledger state", async ({ page }) => {
+  // The redesign moved this dashboard from /economy to its own /cost route
+  // (§07) and replaced the panel <h2>s with `eyebrow` labels, so these are
+  // text assertions rather than role=heading ones.
+  await page.goto("/cost");
+  await expect(page.getByText("Median cost per query")).toBeVisible();
+  await expect(page.getByText("Spend by stage")).toBeVisible();
+  await expect(page.getByText("Spend over time")).toBeVisible();
+  await expect(page.getByText("Ask the ledger")).toBeVisible();
+  await expect(
+    page.getByText("Ledger reachable but no priced rows in this window. Cost is unavailable, not zero."),
+  ).toBeVisible();
   await expect(page.getByText("which pipeline step is most expensive?")).toBeVisible();
   await page.getByRole("button", { name: "how many calls degraded?" }).click();
   await page.getByRole("button", { name: "Ask", exact: true }).click();
@@ -172,8 +186,8 @@ test("fake backend forget clears the visible profile", async ({ page, request })
   });
   page.on("dialog", (dialog) => dialog.accept());
   await page.goto("/");
-  await expect(page.getByText("Papers seen")).toBeVisible();
-  await page.getByRole("button", { name: "Forget profile" }).click();
+  await expect(page.getByText("Papers read")).toBeVisible();
+  await page.getByRole("button", { name: "Reset profile and start cold" }).click();
   await expect(page.getByText("None yet")).toBeVisible();
   await expect(page.getByText(/No context distilled yet/)).toBeVisible();
 });
@@ -205,5 +219,7 @@ test("health footer shows four ports including a red failure", async ({ page }) 
   await page.goto("/");
   const health = page.getByLabel("Backend health");
   await expect(health.locator(":scope > span")).toHaveCount(4);
-  await expect(health.locator('span[title="down"] > span')).toHaveClass(/bg-accent-pink/);
+  // The light redesign dropped the pink failure fill: a down port is now a
+  // warn-bordered white dot (health-footer.tsx:31), not a filled colour chip.
+  await expect(health.locator('span[title="down"] > span').first()).toHaveClass(/border-warn/);
 });

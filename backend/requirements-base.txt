@@ -7,6 +7,9 @@ nilearn>=0.10.0
 # not pull matplotlib in as a hard dependency, so without this line the entire
 # FastAPI app fails to import on a clean install.
 matplotlib>=3.8.0
+# nilearn's view_img_on_surf() renders through plotly and raises ImportError
+# without it, so /atlas serves its degraded fallback instead of the brain view.
+plotly>=5.20.0
 numpy>=1.26.0
 pyyaml>=6.0.0
 pytest>=8.0.0

@@ -7,6 +7,8 @@ import { QueryForm } from "@/components/query-form";
 import { SourcedSummary } from "@/components/sourced-summary";
 import { BrainViewer } from "@/components/brain-viewer";
 import { ProfilePanel } from "@/components/memory/profile-panel";
+import { PolicyPanel } from "@/components/retrieval-policy";
+import { SectionRail } from "@/components/section-rail";
 import type { QueryResult } from "@/lib/api";
 
 export default function Home() {
@@ -36,6 +38,14 @@ export default function Home() {
         <Hero />
         <QueryForm onResult={handleResult} onCurrentQueryChange={setLastQuery} />
         <BrainViewer citedConditionNames={citedConditionNames} />
+        {result?.policy && (
+          <section className="mx-auto w-full max-w-[1100px] px-6 pb-2 pt-[70px] md:px-16">
+            <div className="mb-7 flex flex-col items-center gap-5 text-center">
+              <SectionRail number="§02b" eyebrow="What it cost to look wider" />
+            </div>
+            <PolicyPanel policy={result.policy} />
+          </section>
+        )}
         {result && (
           <div ref={resultsRef}>
             <SourcedSummary result={result} />

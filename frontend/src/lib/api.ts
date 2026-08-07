@@ -5,6 +5,13 @@ export const DEMO_USER_ID = "demo-user";
 export const DEMO_SESSION_ID = "demo-session";
 
 export type QueryResult = components["schemas"]["QueryResponse"];
+export type PolicyOut = components["schemas"]["PolicyOut"];
+
+/** Retrieval policy labels the backend accepts. `null` = the default path
+ *  (RETRIEVAL_TOP_K papers, no compression), which is what omitting the field
+ *  does. An unknown label is a 422 server-side, never a silent fallback, so
+ *  this union must stay in step with backend/app/retrieval/policy.py. */
+export type RetrievalPolicy = "tight" | "generous";
 export type TraceEntry = components["schemas"]["TraceRoundOut"];
 export type ScoredPaper = components["schemas"]["ScoredPaperOut"];
 export type CitationOut = components["schemas"]["CitationOut"];
@@ -36,10 +43,17 @@ function post<T>(path: string, body: unknown, timeoutMs?: number): Promise<T> {
   return request<T>(path, { method: "POST", body: JSON.stringify(body) }, timeoutMs);
 }
 
-export function queryLiterature(query: string, personalize = true): Promise<QueryResult> {
+export function queryLiterature(
+  query: string,
+  personalize = true,
+  policy: RetrievalPolicy | null = null,
+): Promise<QueryResult> {
   return post<QueryResult>(
     "/query",
-    { query, session_id: DEMO_SESSION_ID, user_id: DEMO_USER_ID, personalize },
+    // Omit `policy` entirely when null rather than sending null: the backend
+    // treats both identically, and an absent key keeps the request body
+    // byte-identical to what every pre-policy caller sent.
+    { query, session_id: DEMO_SESSION_ID, user_id: DEMO_USER_ID, personalize, ...(policy ? { policy } : {}) },
     170000,
   );
 }
@@ -48,6 +62,7 @@ export function queryLiteratureStream(
   query: string,
   personalize: boolean,
   onStage: (stage: string, detail: { iteration?: number }) => void,
+  policy: RetrievalPolicy | null = null,
 ): Promise<QueryResult> {
   return new Promise((resolve, reject) => {
     void (async () => {
@@ -61,6 +76,7 @@ export function queryLiteratureStream(
             session_id: DEMO_SESSION_ID,
             user_id: DEMO_USER_ID,
             personalize,
+            ...(policy ? { policy } : {}),
           }),
           signal: AbortSignal.timeout(170000),
         });

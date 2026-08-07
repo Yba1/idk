@@ -34,6 +34,22 @@ Looking at more papers fixes it, and normally costs more. It does not have to.
 improved on 17 of the 20 rare-condition queries, held steady on 2 already at
 ceiling, and regressed on none.
 
+### Iso-cost is an aggregate, not a per-query guarantee
+
+Worth stating before someone runs one query and catches it: the −0.69% holds
+**across the 28-query set**, not on every query. Per query the generous/tight
+token ratio ranges **0.795× to 1.382×**, median **0.992×**, and generous is the
+more expensive arm on **14 of 28**.
+
+The cause is `compress_abstract`'s refusal to trim abstracts with fewer than
+three sentences (`_MIN_SENTENCES_TO_COMPRESS`) — those pass through whole
+regardless of `compress_top_n`, and a 30-paper set simply contains more of them
+than a 10-paper one. So the sentence budget is an upper bound that short
+abstracts escape.
+
+The defensible claim is therefore *"3× the papers for the same token budget on
+average, and a large rare-recall gain"* — not *"always cheaper"*.
+
 Queries `GENEROUS` rescued from surfacing *no* relevant paper at all:
 
 - `Alzheimer's disease FDG-PET temporal parietal pattern`

@@ -2,9 +2,10 @@
 "use client";
 
 import { useState } from "react";
-import { queryLiteratureStream, type QueryResult } from "@/lib/api";
+import { queryLiteratureStream, type QueryResult, type RetrievalPolicy } from "@/lib/api";
 import { SectionRail } from "@/components/section-rail";
 import { ProgressTimeline, type ProgressStageEvent } from "@/components/progress-timeline";
+import { PolicyToggle } from "@/components/retrieval-policy";
 
 type Props = {
   onResult: (result: QueryResult) => void;
@@ -14,6 +15,11 @@ type Props = {
 export function QueryForm({ onResult, onCurrentQueryChange }: Props) {
   const [query, setQuery] = useState("");
   const [personalize, setPersonalize] = useState(true);
+  // null == omit the field == today's default path. Kept as a tri-state rather
+  // than a boolean so "I did not ask for a policy" stays distinguishable from
+  // "I explicitly asked for tight" — they retrieve the same 10 papers but the
+  // default path applies no compression at all.
+  const [policy, setPolicy] = useState<RetrievalPolicy | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [stages, setStages] = useState<ProgressStageEvent[]>([]);
 
@@ -29,9 +35,14 @@ export function QueryForm({ onResult, onCurrentQueryChange }: Props) {
     setStages([]);
     setStatus("loading");
     try {
-      const result = await queryLiteratureStream(queryText.trim(), personalize, (stage, detail) => {
-        setStages((prev) => [...prev, { stage, iteration: detail.iteration }]);
-      });
+      const result = await queryLiteratureStream(
+        queryText.trim(),
+        personalize,
+        (stage, detail) => {
+          setStages((prev) => [...prev, { stage, iteration: detail.iteration }]);
+        },
+        policy,
+      );
       onResult(result);
       setStatus("idle");
     } catch {
@@ -62,7 +73,10 @@ export function QueryForm({ onResult, onCurrentQueryChange }: Props) {
           className="w-full resize-none bg-transparent px-[26px] pb-3 pt-[26px] font-body text-lg leading-[1.5] text-ink outline-none placeholder:text-dim"
           disabled={status === "loading"}
         />
-        <div className="flex flex-col gap-4 px-[26px] pb-[22px] pt-3.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="border-t border-rule px-[26px] py-3.5">
+          <PolicyToggle value={policy} onChange={setPolicy} disabled={status === "loading"} />
+        </div>
+        <div className="flex flex-col gap-4 border-t border-rule px-[26px] pb-[22px] pt-3.5 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex cursor-pointer items-center gap-3">
             <span className="relative inline-flex h-5 w-[34px] items-center">
               <input
