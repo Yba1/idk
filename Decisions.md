@@ -79,3 +79,52 @@ in the account's region:**
 
 **Owner:** whoever on Card 1 (or a successor lane, if Card 1 has handed off
 by then) first gets real Snowflake credentials and runs CP1/CP2 setup.
+
+---
+
+## [c1] Proposal: surface cache hit-rate / cost-saved on /economics/summary (needs 2A/2B sign-off)
+
+**Context:** Phase C of the hackathon "Cost of Intelligence" feature
+(prompt caching + context compression, `backend/app/llm/cache.py` +
+`backend/app/llm/compress.py`) produces real, per-run numbers --
+`cache_stats()` returns `{hits, misses, hit_rate, estimated_cost_saved_usd}`
+-- that would be a natural addition to the demo dashboard.
+
+**Why it's not wired in:** `GET /economics/summary`'s response shape is
+frozen at contracts-v1 (`plan-v2/00-SHARED-CONTRACTS.md` section 4):
+
+```
+GET /economics/summary?window=24h
+  res  { total_requests, total_tokens, total_cost_usd,
+         by_call_site: {call_site, requests, tokens, cost_usd}[],
+         by_hour: {hour_iso, tokens, cost_usd}[] }
+```
+
+There is no field for cache hit-rate or cost-saved, and per section 4's own
+rule ("Card 2B never asks Card 2A to change a shape mid-build -- if a shape
+is wrong, it is logged in Decisions.md and changed once, at an integration
+checkpoint, by both at the same time"), Card 1 is not changing this shape
+unilaterally. `backend/api/routes/economics.py` (Card 1 ownership) is left
+untouched by this work.
+
+**Proposed shape change** (additive, backward compatible -- existing
+fields unchanged):
+
+```
+GET /economics/summary?window=24h
+  res  { total_requests, total_tokens, total_cost_usd,
+         by_call_site: {call_site, requests, tokens, cost_usd}[],
+         by_hour: {hour_iso, tokens, cost_usd}[],
+         cache: { hits: number, misses: number, hit_rate: number,
+                  estimated_cost_saved_usd: number } }
+```
+
+Backed by `backend.app.llm.cache.cache_stats()`, which already returns
+exactly this shape (see `backend/app/llm/cache.py`). Wiring would be a
+one-line addition to `EconomicsSummaryOut` (new optional `cache` field) and
+one line in `economics_summary()`'s two return statements.
+
+**Owner:** needs Card 2A (owns `backend/api/dependencies.py` / the app
+wiring, and is the other party to the section 4 HTTP contract) and Card 2B
+(consumes this shape via generated `api-types.ts`) sign-off before this
+lands, per the section 4 rule above. Not resolved by Card 1 in this pass.

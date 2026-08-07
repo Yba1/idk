@@ -97,3 +97,29 @@ calls `get_retriever()` for — the return type is now the `RetrievalPort`
 Protocol rather than the concrete deleted `HybridRetriever`, so any call
 site that only uses `.search()` / `.closest_conditions()` / `.get_by_pmids()`
 / `.health()` (the Protocol's methods) needs no further change.
+
+## [c1] Card 2A needs to wire backend/app/llm/compress.py into pipeline.py
+
+**File:** `backend/app/pipeline.py` (Card 2A ownership)
+
+**Not a bug/import failure like the entry above — a feature hand-off.**
+`backend/app/llm/compress.py` (new, Card 1, this pass) exposes
+`compress_papers_for_prompt(query, papers, top_n=4)` — extractive
+sentence-level compression of retrieved paper abstracts, real measured
+34.71% token reduction on the gold set (see
+`backend/measurement/results/decision.md` section 4). It is fully
+implemented and tested (`backend/tests/snowflake/test_compression.py`) but
+**not called from anywhere in the live request path**, because prompt
+assembly for the `summary` and `citation_check` call sites lives in
+`backend/app/pipeline.py`, which is outside Card 1's ownership bucket.
+
+**Requested change:** wherever `pipeline.py` builds the multi-paper
+abstract text that goes into the `summary` and `citation_check` prompts,
+call `compress_papers_for_prompt(query, [(p.pmid, p.abstract) for p in
+papers], top_n=4)` and use each `PaperCompression.result.text` in place of
+the raw abstract, keyed by `pmid` so citation markers stay aligned to the
+right paper. `hyde`, `relevance_check`, `refine`, and `memory_distill`
+should NOT be touched — they don't build multi-paper abstract prompts.
+
+**Owner:** Card 2A. Not resolved by Card 1 because `backend/app/pipeline.py`
+is outside Card 1's ownership bucket (`scripts/ownership.txt`).

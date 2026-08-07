@@ -6,6 +6,80 @@ what was actually executed (all Tier 1, credential-free) vs. what is
 implemented-but-unexecuted and needs a human with real Snowflake
 credentials to complete.
 
+## Update — 2026-08-07: prompt caching + context compression ("Cost of
+Intelligence" hackathon feature), still no Snowflake credentials
+
+New feature added beyond original phase-card scope, for a hackathon demo
+showing real % cost reduction. Three parts, all Tier 1 / credential-free
+(no live Snowflake account was available or needed):
+
+1. **Extractive context compression** — `backend/app/llm/compress.py`
+   scores each sentence of a retrieved paper's abstract by query-term
+   overlap (same tokenizer/overlap pattern as
+   `backend/contracts/fakes.py`'s `_tokenize` and
+   `backend/app/retrieval/rarity.py`'s boost logic — reused, not
+   reinvented) and keeps the top-N (default 4) highest-scoring sentences
+   per paper, in original order. Degrades to full text when a paper has
+   too few sentences to safely trim. Instrumented with
+   `backend/app/llm/tokenizer.py`'s existing `estimate_tokens` for real
+   before/after token counts.
+
+   **Not wired into prompt assembly.** `summary`/`citation_check` prompt
+   assembly lives in `backend/app/pipeline.py`, which is **Card 2A
+   ownership**, not Card 1's — per `scripts/ownership.txt`. Card 1 exposes
+   `compress_papers_for_prompt(query, [(pmid, abstract), ...], top_n=...)`
+   as a clean, independently-tested entry point; **Card 2A needs to call
+   it** at the `summary` and `citation_check` call sites in
+   `pipeline.py` (only those two — `hyde`/`relevance_check`/`refine`/
+   `memory_distill` don't build multi-paper abstract prompts the same way)
+   to actually realize the token savings in a live request. This is a
+   genuine cross-lane hand-off, not a blocker Card 1 can resolve — flagged
+   here rather than worked around by editing `pipeline.py`.
+
+2. **In-process TTL prompt cache** — `backend/app/llm/cache.py`, hand-rolled
+   dict + `time.monotonic()` TTL (no new pip dependency). Wired into
+   `CortexLLMClient.chat()` (`backend/snowflake/llm.py`), scoped to `hyde`
+   and `relevance_check` only. On a cache hit, the real Cortex COMPLETE
+   call is skipped entirely and the cached `ChatResult` is returned; a
+   `LedgerEvent` is still written (exactly one per `chat()` call, same
+   invariant as before) but with token/cost fields zeroed for that event —
+   `LedgerEvent` itself is untouched (frozen, no `cache_hit` field added,
+   per the phase-card instruction). Hit/miss counts and an
+   observed-avg-cost-derived savings estimate live in a separate
+   `CacheStats` object (`cache_stats()`), not on the frozen model.
+
+3. **Real measured numbers** —
+   `backend/measurement/run_cost_of_intelligence.py` runs both of the
+   above through their real code paths (only the Cortex COMPLETE
+   transport call is stubbed, since there is no live account) against the
+   same 28-query gold set `run_gate.py` uses, and reports actually-executed
+   numbers (not estimates): **34.71% token reduction** from compression
+   across 280 compressed paper abstracts, **50% cache hit-rate** from a
+   synthetic 2-calls-per-query same-session-repeat pattern (28
+   misses + 28 hits / 56 calls — see `backend/measurement/results/decision.md`
+   section 4 for the full caveat on why this is a synthetic pattern, not an
+   organic hit-rate claim), and **13.88% estimated cost reduction**
+   (compression-only, on a representative summary-shaped call, computed via
+   the real `compute_cost_usd()` and the researched `claude-3-5-sonnet`
+   pricing row from item 4 below). Full command + output pasted into
+   `backend/measurement/results/decision.md` section 4;
+   `backend/measurement/results/cost_of_intelligence.json` has the raw
+   numbers.
+
+**Dashboard wiring:** `cache_stats()`'s shape does not fit
+`/economics/summary`'s frozen response shape without an additive field —
+proposed as a `Decisions.md` entry needing Card 2A/2B sign-off per the
+section 4 "shape changes are logged, not made unilaterally" rule, rather
+than wired in unilaterally. `backend/api/routes/economics.py` is untouched.
+
+**Files added:** `backend/app/llm/compress.py`, `backend/app/llm/cache.py`,
+`backend/measurement/run_cost_of_intelligence.py`,
+`backend/tests/snowflake/test_compression.py`,
+`backend/tests/snowflake/test_cache.py`.
+**Files changed:** `backend/snowflake/llm.py` (cache wiring in `chat()`),
+`backend/measurement/results/decision.md` (new section 4),
+`Decisions.md` (new proposal entry), `Blockers.md` (new hand-off note).
+
 ## Update — second pass (this run), still no Snowflake credentials
 
 Continued Card 1 on branch-1, again with zero Snowflake credentials in the
