@@ -1,63 +1,13 @@
-title: NeuLitTrace Reliability and Fallback Flow
+direction: right
 
-direction: down
+request: "Query request"
+retrieval: "Retrieval\nfail → no result state"
+llm: "LLM\nfail → degraded answer"
+memory: "Memory\nfail → unpersonalized answer"
+ledger: "Ledger\nfail → cost unavailable"
+ui: "One honest UI"
 
-vars: {
-  d2-config: {
-    layout-engine: elk
-  }
-}
-
-classes: {
-  external: {
-    style.fill: "#d5e8d4"
-    style.stroke: "#82b366"
-    shape: cloud
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  logic: {
-    style.fill: "#dae8fc"
-    style.stroke: "#6c8ebf"
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  error: {
-    style.fill: "#f8cecc"
-    style.stroke: "#b85450"
-    style.stroke-dash: 3
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-}
-
-call: "LLM Call Request" { shape: oval }
-
-primary: "Try Primary Client\n(Groq proxy or direct)" { class: logic }
-attempt: "Attempt 1, 2, 3" { class: logic }
-timeout_check: "APIError or\nAPITimeoutError?" { shape: diamond; class: logic }
-retry_limit: "Retries exhausted\n(3 total)?" { shape: diamond; class: logic }
-backoff: "Sleep 2^attempt sec" { class: logic }
-
-gemini_check: "GEMINI_API_KEY\nconfigured?" { shape: diamond; class: logic }
-gemini_client: "Try Gemini Fallback\n(gemini-flash-latest)" { class: external }
-gemini_error: "Gemini call fails?" { shape: diamond; class: logic }
-
-success: "Return ChatResult\nwith content" { shape: hexagon; class: logic }
-degraded: "Return ChatResult\nwith degraded=True" { class: error }
-
-call -> primary
-primary -> attempt
-attempt -> timeout_check
-
-timeout_check -> success: "Success"
-timeout_check -> retry_limit: "Error"
-retry_limit -> backoff: "Retry available"
-backoff -> attempt
-retry_limit -> gemini_check: "All retries failed"
-
-gemini_check -> degraded: "Not configured"
-gemini_check -> gemini_client: "Yes"
-gemini_client -> gemini_error
-gemini_error -> success: "Gemini succeeds"
-gemini_error -> degraded: "Gemini also fails"
+request -> retrieval -> ui
+request -> llm -> ui
+request -> memory -> ui
+request -> ledger -> ui

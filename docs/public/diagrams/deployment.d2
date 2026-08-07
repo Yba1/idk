@@ -1,66 +1,10 @@
-title: NeuLitTrace Deployment Topology
+direction: right
 
-direction: down
+browser: "Browser\nNext.js :3000"
+api: "FastAPI :8000"
+snowflake: "Snowflake\nSearch · COMPLETE · Ledger · Analyst"
+everos: "EverOS\nMemory"
 
-vars: {
-  d2-config: {
-    layout-engine: elk
-  }
-}
-
-classes: {
-  trigger: {
-    style.fill: "#e1d5e7"
-    style.stroke: "#9673a6"
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  external: {
-    style.fill: "#d5e8d4"
-    style.stroke: "#82b366"
-    shape: cloud
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  logic: {
-    style.fill: "#dae8fc"
-    style.stroke: "#6c8ebf"
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  storage: {
-    style.fill: "#f5f5f5"
-    style.stroke: "#666666"
-    shape: cylinder
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-}
-
-browser: "Browser" { shape: oval; class: trigger }
-
-local_machine: "Local Machine (dev only, no cloud deploy configured)" {
-  style.font-size: 26
-
-  frontend: "Next.js Dev Server\n(localhost:3000)" { class: trigger }
-  backend: "FastAPI / uvicorn\n(localhost:8000, --reload)" { class: logic }
-  corpus_file: "backend/data/corpus.json\n(loaded in-memory at startup)" { class: storage }
-  env_note: "Secrets loaded from .env at\nprocess startup (repo root),\nnot committed to git" { class: logic }
-}
-
-external: "External Services" {
-  style.font-size: 26
-
-  groq: "Groq API" { class: external }
-  paritok_proxy: "Paritok Proxy\n(127.0.0.1:8080, local)" { class: external }
-  paritok_gpu: "Paritok GPU Server\n(compression backend, 8s deadline)" { class: external }
-}
-
-browser -> local_machine.frontend: "HTTP (dev)"
-local_machine.frontend -> local_machine.backend: "REST / fetch"
-local_machine.backend -> local_machine.corpus_file: "read at startup"
-local_machine.backend -> local_machine.env_note: "reads at startup"
-local_machine.backend -> external.paritok_proxy: "proxy route"
-external.paritok_proxy -> external.groq: "chat completions"
-local_machine.backend -> external.groq: "direct route"
-local_machine.backend -> external.paritok_gpu: "prompt compression"
+browser -> api: "HTTP / SSE"
+api -> snowflake: "retrieval · inference · economics"
+api -> everos: "profile · thread"
