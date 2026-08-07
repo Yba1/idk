@@ -30,7 +30,7 @@ def _connection_params() -> dict | None:
     password = os.environ.get("SNOWFLAKE_PASSWORD")
     if not account or not user or not password:
         return None
-    return {
+    params = {
         "account": account,
         "user": user,
         "password": password,
@@ -39,6 +39,18 @@ def _connection_params() -> dict | None:
         "database": os.environ.get("SNOWFLAKE_DATABASE", "NEULIT"),
         "schema": os.environ.get("SNOWFLAKE_SCHEMA", "CORE"),
     }
+    # Accounts with MFA enrolled reject a raw account password for
+    # programmatic access ("MFA authentication is required, but none of your
+    # current MFA methods are supported for programmatic authentication").
+    # The supported paths are a Programmatic Access Token or key-pair. A PAT
+    # goes in SNOWFLAKE_PASSWORD as-is; some connector versions additionally
+    # want authenticator=PROGRAMMATIC_ACCESS_TOKEN, and `externalbrowser` is
+    # useful for local interactive runs -- so this is a passthrough rather
+    # than a hardcoded mode. Unset means the connector's default.
+    authenticator = os.environ.get("SNOWFLAKE_AUTHENTICATOR", "").strip()
+    if authenticator:
+        params["authenticator"] = authenticator
+    return params
 
 
 def get_session():
