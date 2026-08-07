@@ -4,8 +4,7 @@ fixes a bad retrieval rather than just retrying blindly.
 """
 from __future__ import annotations
 
-import json
-
+from backend.app.llm.json_repair import try_parse_json
 from backend.contracts.models import Message
 from backend.contracts.ports import LLMPort
 
@@ -40,8 +39,6 @@ def run_refine(
     )
     if result.degraded:
         return query
-    try:
-        refined = json.loads(result.content).get("refined_query")
-    except (json.JSONDecodeError, AttributeError):
-        return query
+    parsed = try_parse_json(result.content)
+    refined = parsed.get("refined_query") if parsed else None
     return refined if isinstance(refined, str) and refined.strip() else query

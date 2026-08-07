@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
+from backend.app.llm.json_repair import try_parse_json
 from backend.contracts.models import Message, ScoredPaper
 from backend.contracts.ports import LLMPort
 from backend.app.summary.generate import SourcedCitation
@@ -85,9 +86,8 @@ def check_citations(
     if result.degraded:
         return citations
 
-    try:
-        parsed = json.loads(result.content)
-    except json.JSONDecodeError:
+    parsed = try_parse_json(result.content)
+    if parsed is None:
         return citations
 
     results = parsed.get("results")

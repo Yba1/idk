@@ -4,10 +4,10 @@ can verify each sentence against its citation.
 """
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 
+from backend.app.llm.json_repair import try_parse_json
 from backend.contracts.models import Message, ScoredPaper
 from backend.contracts.ports import LLMPort
 
@@ -94,12 +94,12 @@ def generate_sourced_summary(
     if result.degraded:
         return SourcedSummary(markdown="", citations=[], degraded=True)
 
+    parsed = try_parse_json(result.content)
     try:
-        parsed = json.loads(result.content)
         markdown = parsed["summary_markdown"]
         if not isinstance(markdown, str) or not markdown.strip():
             raise ValueError("summary_markdown missing or empty")
-    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError):
         return SourcedSummary(markdown="", citations=[], degraded=True)
 
     return SourcedSummary(markdown=markdown, citations=_extract_citations(markdown, papers), degraded=False)

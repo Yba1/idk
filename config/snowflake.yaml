@@ -23,7 +23,7 @@ embedding_dim: 768
 
 # Default Cortex COMPLETE model. Overridden by SNOWFLAKE_CORTEX_MODEL at
 # runtime; this is only the fallback when that env var is unset.
-default_cortex_model: claude-3-5-sonnet
+default_cortex_model: claude-sonnet-4-5
 
 statement_timeout_seconds: 30
 llm_timeout_seconds: 20

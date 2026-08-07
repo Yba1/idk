@@ -5,8 +5,7 @@ matches literature far better than a short symptom description does.
 """
 from __future__ import annotations
 
-import json
-
+from backend.app.llm.json_repair import try_parse_json
 from backend.contracts.models import Message
 from backend.contracts.ports import LLMPort
 
@@ -43,8 +42,6 @@ def run_hyde(
     )
     if result.degraded:
         return query
-    try:
-        expanded = json.loads(result.content).get("expanded_query")
-    except (json.JSONDecodeError, AttributeError):
-        return query
+    parsed = try_parse_json(result.content)
+    expanded = parsed.get("expanded_query") if parsed else None
     return expanded if isinstance(expanded, str) and expanded.strip() else query

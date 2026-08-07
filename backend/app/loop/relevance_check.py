@@ -4,8 +4,7 @@ text, so the loop's pass/fail decision is deterministic.
 """
 from __future__ import annotations
 
-import json
-
+from backend.app.llm.json_repair import try_parse_json
 from backend.contracts.models import Message, ScoredPaper
 from backend.contracts.ports import LLMPort
 
@@ -59,9 +58,8 @@ def run_relevance_check(
     )
     if result.degraded:
         return {"relevant": True, "confidence": 0.0, "note": "relevance check degraded; treated as passing"}
-    try:
-        parsed = json.loads(result.content)
-    except json.JSONDecodeError:
+    parsed = try_parse_json(result.content)
+    if parsed is None:
         return {"relevant": True, "confidence": 0.0, "note": "relevance check returned invalid JSON; treated as passing"}
     return {
         "relevant": bool(parsed.get("relevant")),

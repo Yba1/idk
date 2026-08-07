@@ -51,7 +51,16 @@ def _normalize_content(text: str) -> str:
 
 
 def normalize_messages(messages: list[Message]) -> tuple[tuple[str, str], ...]:
-    return tuple((m.role, _normalize_content(m.content)) for m in messages)
+    # Accepts either Message instances or plain {"role", "content"} dicts -
+    # most pipeline call sites build prompts as dicts (see
+    # backend/snowflake/llm.py's chat(), which has the same tolerance).
+    def _role(m):
+        return m.role if hasattr(m, "role") else m["role"]
+
+    def _content(m):
+        return m.content if hasattr(m, "content") else m["content"]
+
+    return tuple((_role(m), _normalize_content(_content(m))) for m in messages)
 
 
 def cache_key(

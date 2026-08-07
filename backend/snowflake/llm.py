@@ -16,6 +16,7 @@ import time
 from backend.app.llm.cache import cache_key, get_default_cache, is_cacheable_call_site
 from backend.app.llm.json_repair import build_repair_messages, try_parse_json
 from backend.app.llm.pricing import ModelPriceRow, compute_cost_usd
+from backend.app.llm.routing import model_for_call_site
 from backend.app.llm.tokenizer import estimate_tokens
 from backend.contracts.models import CallSite, ChatResult, LedgerEvent, Message, TokenUsage
 from backend.snowflake.session import get_session, snowflake_available
@@ -24,10 +25,14 @@ logger = logging.getLogger("neulit.snowflake.llm")
 
 _TIMEOUT_SECONDS = 20
 _MAX_RETRIES = 3
-_DEFAULT_MODEL = "claude-3-5-sonnet"
+_DEFAULT_MODEL = "claude-sonnet-4-5"
 
 
 def _active_model() -> str:
+    """Legacy single-model resolution, kept for health() (which reports
+    readiness independent of any particular call_site) and as the ultimate
+    fallback semantics documented in backend/app/llm/routing.py.
+    """
     return os.environ.get("SNOWFLAKE_CORTEX_MODEL", _DEFAULT_MODEL)
 
 
@@ -88,9 +93,9 @@ class CortexLLMClient:
             raise RuntimeError("snowflake session unavailable")
 
         result = session.sql(
-            "SELECT SNOWFLAKE.CORTEX.COMPLETE(?, ?, ?) AS RESP",
-            params=[model, prompt_payload, json.dumps(options)],
-        ).collect(timeout=_TIMEOUT_SECONDS)
+            "SELECT SNOWFLAKE.CORTEX.COMPLETE(?, PARSE_JSON(?), PARSE_JSON(?)) AS RESP",
+            params=[model, json.dumps(prompt_payload), json.dumps(options)],
+        ).collect(statement_params={"STATEMENT_TIMEOUT_IN_SECONDS": str(_TIMEOUT_SECONDS)})
         return result[0]["RESP"]
 
     def chat(
@@ -105,7 +110,14 @@ class CortexLLMClient:
         max_output_tokens: int = 1024,
     ) -> ChatResult:
         start = time.monotonic()
-        model = _active_model()
+        # Phase E: per-call-site model routing -- cheap tier for
+        # relevance_check/hyde, strong tier for summary/citation_check/
+        # refine/memory_distill. See backend/app/llm/routing.py for the
+        # env-var override priority and default model choices. Everything
+        # downstream (pricing lookup, TokenUsage.model, LedgerEvent) uses
+        # this resolved `model`, so cost/ledger naturally reflect whichever
+        # model actually served this call.
+        model = model_for_call_site(call_site)
         degraded = False
         error: str | None = None
         content = ""
@@ -167,8 +179,19 @@ class CortexLLMClient:
             if json_schema is not None:
                 options["response_format"] = {"type": "json", "schema": json_schema}
 
-            payload = [{"role": m.role, "content": m.content} for m in messages]
-            prompt_text_all = "\n".join(m.content for m in messages)
+            # Accept either backend.contracts.models.Message instances or
+            # plain {"role", "content"} dicts - most call sites across the
+            # pipeline still build prompts as dicts, matching the wire shape
+            # Cortex COMPLETE itself expects, rather than constructing
+            # Message objects.
+            def _role(m):
+                return m.role if hasattr(m, "role") else m["role"]
+
+            def _content(m):
+                return m.content if hasattr(m, "content") else m["content"]
+
+            payload = [{"role": _role(m), "content": _content(m)} for m in messages]
+            prompt_text_all = "\n".join(_content(m) for m in messages)
 
             raw_response = None
             last_exc: Exception | None = None
