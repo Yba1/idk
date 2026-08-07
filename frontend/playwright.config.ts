@@ -1,17 +1,29 @@
 import { defineConfig } from "@playwright/test";
 
+const externalServers = process.env.PLAYWRIGHT_EXTERNAL_SERVERS === "1";
+
 export default defineConfig({
-  testDir: "./video-capture",
-  timeout: 900_000,
-  fullyParallel: false,
-  workers: 1,
+  testDir: "./tests",
+  timeout: 30_000,
+  fullyParallel: true,
   use: {
     baseURL: "http://localhost:3000",
-    viewport: { width: 1920, height: 1080 },
-    video: {
-      mode: "on",
-      size: { width: 1920, height: 1080 },
-    },
+    trace: "retain-on-failure",
   },
-  outputDir: "./video-capture/output",
+  webServer: externalServers ? undefined : [
+    {
+      command: "npm run start",
+      url: "http://localhost:3000",
+      reuseExistingServer: true,
+      timeout: 120_000,
+    },
+    {
+      command: "python -m uvicorn backend.api.main:app --port 8000",
+      cwd: "..",
+      env: { NEULIT_PROFILE: "fake" },
+      url: "http://localhost:8000/health",
+      reuseExistingServer: true,
+      timeout: 120_000,
+    },
+  ],
 });

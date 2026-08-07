@@ -1,213 +1,27 @@
-title: NeuLitTrace System Architecture
+direction: right
 
-direction: down
+ui: "Next.js\nquery · memory · economy"
+api: "FastAPI\ncontract + orchestration"
 
-vars: {
-  d2-config: {
-    layout-engine: elk
-  }
+ports: {
+  label: "Independent ports"
+  retrieval: "RetrievalPort"
+  llm: "LLMPort"
+  memory: "MemoryPort"
+  ledger: "LedgerPort"
 }
 
-classes: {
-  trigger: {
-    style.fill: "#e1d5e7"
-    style.stroke: "#9673a6"
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  external: {
-    style.fill: "#d5e8d4"
-    style.stroke: "#82b366"
-    shape: cloud
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  logic: {
-    style.fill: "#dae8fc"
-    style.stroke: "#6c8ebf"
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  review: {
-    style.fill: "#fff2cc"
-    style.stroke: "#d6b656"
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  error: {
-    style.fill: "#f8cecc"
-    style.stroke: "#b85450"
-    style.stroke-dash: 3
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  storage: {
-    style.fill: "#f5f5f5"
-    style.stroke: "#666666"
-    shape: cylinder
-    style.font-size: 22
-    style.stroke-width: 2
-  }
-  mocked: {
-    style.fill: "#ffe6cc"
-    style.stroke: "#d79b00"
-    shape: queue
-    style.font-size: 22
-    style.stroke-width: 2
-  }
+snowflake: {
+  label: "Snowflake"
+  search: "Cortex Search"
+  complete: "Cortex COMPLETE"
+  token_ledger: "TOKEN_LEDGER"
 }
 
-# Frontend Layer
-frontend: {
-  shape: rectangle
-  label: "Frontend (Next.js)"
-  class: trigger
-  style.font-size: 26
+evermind: "EverOS\nprofile + thread"
 
-  query_form: "Query Form"
-  retrieval_trace: "Retrieval Trace"
-  sourced_summary: "Sourced Summary"
-  brain_viewer: "Brain Viewer (Atlas iframe)"
-  progress_timeline: "Progress Timeline"
-  rarity_comparison: "Rarity Comparison"
-
-  api_client: "API Client (api.ts)"
-
-  query_form -> retrieval_trace
-  query_form -> sourced_summary
-  query_form -> brain_viewer
-  query_form -> progress_timeline
-}
-
-# API Gateway
-api_gateway: {
-  shape: rectangle
-  label: "FastAPI Backend (main.py)"
-  class: logic
-  style.font-size: 26
-
-  query_endpoint: "POST /query, /query/stream"
-  demo_endpoint: "GET /demo-contrast"
-  conditions_endpoint: "GET /conditions"
-  atlas_endpoint: "GET /atlas, /atlas/{condition}"
-  health_endpoint: "GET /health"
-}
-
-# Core Pipeline
-pipeline: {
-  shape: rectangle
-  label: "Query Pipeline"
-  class: logic
-  style.font-size: 26
-
-  search_loop: "Search Loop (refine.py)"
-  hyde: "HyDE Expand"
-  hybrid_retrieval: "Hybrid Retrieval"
-  relevance_check: "Relevance Check"
-  refine_step: "Refine Query (max 2 iterations)"
-
-  search_loop -> hyde
-  hyde -> hybrid_retrieval
-  relevance_check -> hybrid_retrieval
-  relevance_check -> refine_step
-  refine_step -> hyde
-}
-
-# Retrieval Layer (Local, no LLM)
-retrieval: {
-  shape: rectangle
-  label: "Retrieval Layer (Local Computation)"
-  class: logic
-  style.font-size: 26
-
-  bm25: "BM25 Index"
-  vector_search: "Vector Index"
-  rarity_boost: "Rarity Boost Multiplier"
-  corpus: { label: "Corpus: 329 papers, 14 conditions"; class: storage }
-
-  bm25 -> corpus
-  vector_search -> corpus
-  rarity_boost -> corpus
-}
-
-# Summary and Verification
-verification: {
-  shape: rectangle
-  label: "Summary and Verification"
-  class: logic
-  style.font-size: 26
-
-  summary_gen: "Sourced Summary Gen (generate.py)"
-  citation_check: "Citation Verification"
-  differential_check: "Differential Diagnosis"
-
-  citation_check -> differential_check: "concurrent (only if a non-self-referential\ndifferential candidate exists)" { style.font-size: 32 }
-}
-
-# Path 1: Proxy LLM Path
-proxy_path: {
-  shape: rectangle
-  label: "Path 1: Proxy Route"
-  class: logic
-  style.font-size: 26
-
-  proxy_client: "Proxy Client (OpenAI SDK)"
-  paritok_proxy: "Paritok Proxy (127.0.0.1:8080)"
-  groq_proxy: { label: "Groq API"; class: external }
-
-  proxy_client -> paritok_proxy -> groq_proxy
-}
-
-# Path 2: Direct Groq Path
-direct_path: {
-  shape: rectangle
-  label: "Path 2: Direct Groq Route"
-  class: logic
-  style.font-size: 26
-
-  direct_client: "Direct Groq Client (OpenAI SDK)"
-  groq_direct: { label: "Groq API"; class: external }
-
-  direct_client -> groq_direct
-}
-
-# Path 3: Compression Path
-compression_path: {
-  shape: rectangle
-  label: "Path 3: Paritok GPU Compression"
-  class: logic
-  style.font-size: 26
-
-  compression_fn: "compress_for_prompt()"
-  paritok_gpu: { label: "Paritok GPU Server (8s deadline)"; class: external }
-  compression_fn -> paritok_gpu
-}
-
-# Connections
-frontend.api_client -> api_gateway.query_endpoint
-api_gateway.query_endpoint -> pipeline.search_loop
-pipeline.search_loop -> pipeline.hyde
-pipeline.hybrid_retrieval -> retrieval.bm25
-pipeline.hybrid_retrieval -> retrieval.vector_search
-pipeline.relevance_check -> pipeline.hybrid_retrieval
-
-pipeline.hyde -> proxy_path.proxy_client
-pipeline.relevance_check -> proxy_path.proxy_client
-pipeline.refine_step -> proxy_path.proxy_client
-
-pipeline.search_loop -> verification.summary_gen
-verification.summary_gen -> compression_path.compression_fn
-verification.summary_gen -> direct_path.direct_client
-
-verification.citation_check -> direct_path.direct_client
-verification.differential_check -> direct_path.direct_client
-
-# Condition-Match Path (no LLM)
-retrieval.condition_match: "Condition-Centroid Matcher" { class: logic }
-retrieval.no_match_response: "no_match Response (no LLM call)" { class: logic }
-
-pipeline.search_loop -> retrieval.condition_match: "zero papers after\nboth iterations" { style.font-size: 32 }
-retrieval.condition_match -> retrieval.corpus: "cosine similarity vs\ncondition centroids" { style.font-size: 32 }
-retrieval.condition_match -> retrieval.no_match_response: "score >= 0.42\nthreshold" { style.font-size: 32 }
-
-model: "Model: llama-3.3-70b-versatile"
+ui -> api
+api -> ports.retrieval -> snowflake.search
+api -> ports.llm -> snowflake.complete
+api -> ports.memory -> evermind
+api -> ports.ledger -> snowflake.token_ledger

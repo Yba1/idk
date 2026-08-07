@@ -1,24 +1,23 @@
-// frontend/src/components/waking-loader.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { Brain } from "lucide-react";
 
 const PHASES = [
-  "Waking up the server…",
-  "Warming up the retrieval index…",
-  "Connecting to the language model…",
-  "Almost ready…",
+  "Waking the Snowflake warehouse…",
+  "Searching 329 papers…",
+  "Checking relevance…",
+  "Writing the sourced summary…",
 ];
 
-const PHASE_INTERVAL_MS = 1800;
+const PHASE_INTERVAL_MS = 1200;
 
 export function WakingLoader() {
   const [revealed, setRevealed] = useState(1);
 
   useEffect(() => {
     if (revealed >= PHASES.length) return;
-    const timer = setTimeout(() => setRevealed((n) => n + 1), PHASE_INTERVAL_MS);
+    const timer = setTimeout(() => setRevealed((count) => count + 1), PHASE_INTERVAL_MS);
     return () => clearTimeout(timer);
   }, [revealed]);
 
@@ -65,8 +64,8 @@ export function WakingLoader() {
         })}
       </div>
 
-      <p className="font-body text-[11px] text-mist-dim text-center max-w-xs">
-        First request after inactivity can take up to a minute to spin up.
+      <p className="max-w-xs text-center font-body text-[11px] text-mist-dim">
+        Warehouse resume usually takes 3–8 seconds.
       </p>
     </div>
   );

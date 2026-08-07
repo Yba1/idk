@@ -2,6 +2,8 @@
 "use client";
 
 import { NeuronCanvas } from "@/components/neuron-canvas";
+import Image from "next/image";
+import Link from "next/link";
 
 export function Hero() {
   return (
@@ -39,14 +41,17 @@ export function Hero() {
 
       <div className="relative z-[2] flex items-center justify-between px-6 py-9 md:px-12">
         <span className="flex items-center gap-3">
-          <img src="/logo-n.svg" alt="" width={32} height={32} className="rounded-[8px]" />
+          <Image src="/logo-n.svg" alt="" width={32} height={32} className="rounded-[8px]" />
           <span className="font-body text-sm font-semibold uppercase tracking-[0.22em] text-ink">
             NeuLitTrace
           </span>
         </span>
-        <span className="rounded-full border border-line-bright bg-void-2/40 px-4 py-2 font-body text-xs tracking-[0.08em] text-mist backdrop-blur-md">
-          Literature verification - not a diagnostic tool
-        </span>
+        <div className="flex items-center gap-3">
+          <Link href="/economy" className="font-body text-xs text-mist underline hover:text-ink">Token economy</Link>
+          <span className="rounded-full border border-line-bright bg-void-2/40 px-4 py-2 font-body text-xs tracking-[0.08em] text-mist backdrop-blur-md">
+            Snowflake + EverMind
+          </span>
+        </div>
       </div>
 
       <div className="relative z-[2] flex flex-1 flex-col justify-center px-6 md:px-12 max-w-4xl">
@@ -60,6 +65,7 @@ export function Hero() {
           A literature-verification engine for rare PET and neuroimaging findings:
           weighted toward the underexplored, backed by citations at every step.
         </p>
+        <p className="mt-5 font-body text-sm text-mist">Retrieval and inference on Snowflake · memory by EverMind</p>
       </div>
 
       <div className="relative z-[2] flex flex-col items-center gap-2 pb-9 font-body text-xs uppercase tracking-[0.1em] text-mist">

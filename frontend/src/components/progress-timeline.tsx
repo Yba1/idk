@@ -3,7 +3,6 @@ const STAGES = [
   { key: "retrieval", label: "Searching literature" },
   { key: "relevance_check", label: "Checking relevance" },
   { key: "refine_query", label: "Refining search" },
-  { key: "compress", label: "Compressing context" },
   { key: "summarize", label: "Writing summary" },
   { key: "citation_check", label: "Verifying citations" },
 ];
