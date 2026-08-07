@@ -7,14 +7,16 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, wait
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import uuid4
 
 from backend.app.corpus.conditions import CONDITIONS
+from backend.app.llm.compress import compress_abstract
 from backend.app.loop.hyde import run_hyde
 from backend.app.loop.refine import run_refine
 from backend.app.loop.relevance_check import run_relevance_check
 from backend.app.loop.trace import LoopTraceEntry
+from backend.app.retrieval.policy import RetrievalPolicy
 from backend.app.summary.generate import SourcedCitation, generate_sourced_summary
 from backend.app.verify.citation_check import check_citations
 from backend.contracts.models import ChatResult, Message, ResearcherProfile, ScoredPaper
@@ -149,6 +151,35 @@ def _aggregate_cost(calls: list[tuple[str, ChatResult]]) -> CostInfo:
     return CostInfo(total_tokens=total_tokens, cost_usd=round(total_cost, 8), by_call_site=by_call_site)
 
 
+def _compress_for_policy(
+    query: str,
+    papers: list[ScoredPaper],
+    policy: RetrievalPolicy,
+    secondary_query: str | None = None,
+) -> tuple[list[ScoredPaper], int, int]:
+    """Return `papers` with each abstract extractively compressed to
+    `policy.compress_top_n` sentences, plus the before/after token totals.
+
+    `Paper` is frozen, so this rebuilds each one via `dataclasses.replace`
+    rather than mutating in place -- the originals stay intact for anything
+    holding a reference (the citation checker still needs to verify claims
+    against the *uncompressed* source, which is why compression is applied to
+    the summary input only, at the call site, and not to `reranked` globally).
+    """
+    compressed: list[ScoredPaper] = []
+    tokens_before = tokens_after = 0
+    for sp in papers:
+        result = compress_abstract(
+            query, sp.paper.abstract,
+            top_n=policy.compress_top_n,
+            secondary_query=secondary_query,
+        )
+        tokens_before += result.tokens_before
+        tokens_after += result.tokens_after
+        compressed.append(replace(sp, paper=replace(sp.paper, abstract=result.text)))
+    return compressed, tokens_before, tokens_after
+
+
 def _emit(on_stage: Callable[[str, dict], None] | None, stage: str, **detail) -> None:
     if on_stage is not None:
         on_stage(stage, detail)
@@ -161,7 +192,20 @@ def run_query(
     personalize: bool,
     *,
     on_stage: Callable[[str, dict], None] | None = None,
+    policy: RetrievalPolicy | None = None,
 ) -> QueryResult:
+    """`policy=None` is today's exact behaviour: retrieve `RETRIEVAL_TOP_K`,
+    summarise the top `SUMMARY_TOP_N` uncompressed abstracts. Passing a
+    `RetrievalPolicy` opts into the breadth/depth trade measured in
+    `backend/measurement/run_policy_bench.py` -- retrieve `policy.top_k` and
+    compress each abstract to `policy.compress_top_n` sentences before the
+    summary call.
+
+    Opt-in rather than default on purpose: the bench measures what reaches the
+    prompt, not answer quality (no LLM is called in it), so switching the live
+    default is a decision that needs a live citation-checked run behind it, not
+    a retrieval metric.
+    """
     request_id = str(uuid4())
     services = get_services()
     llm = _RecordingLLM(services.llm)
@@ -184,7 +228,7 @@ def run_query(
         raw_results = services.retrieval.search(
             current_query,
             secondary_query=hyde_query,
-            top_k=RETRIEVAL_TOP_K,
+            top_k=policy.top_k if policy else RETRIEVAL_TOP_K,
             exclude_pmids=tuple(seen) if memory_applied else (),
         )
         if memory_applied:
@@ -218,11 +262,20 @@ def run_query(
         hyde_query = run_hyde(llm, current_query, request_id=request_id, session_id=session_id, user_id=user_id)
         _emit(on_stage, "hyde_expand", iteration=round_idx + 1)
 
-    top_papers = reranked[:SUMMARY_TOP_N]
+    # Under a policy the whole retrieved set is the point -- cutting to
+    # SUMMARY_TOP_N would throw away exactly the breadth the policy bought.
+    top_papers = reranked[: policy.top_k] if policy else reranked[:SUMMARY_TOP_N]
+
+    # Compression feeds the summary call only. `top_papers` (uncompressed) is
+    # what goes to check_citations and into the response, so claims are still
+    # verified against, and the user still reads, the real abstract.
+    summary_papers = top_papers
+    if policy:
+        summary_papers, _, _ = _compress_for_policy(query, top_papers, policy, hyde_query)
 
     distilled_context = profile.distilled_context if memory_applied else ""
     summary = generate_sourced_summary(
-        llm, query, top_papers,
+        llm, query, summary_papers,
         distilled_context=distilled_context,
         request_id=request_id, session_id=session_id, user_id=user_id,
     )
